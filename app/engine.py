@@ -52,6 +52,7 @@ class SignalEngine:
         self.last_scan_errs = {}
         self._tracker_task = None
         self._resync_task = None
+        self._scan_task = None
         self.bad_assets = {}
         self.state = {"phase": "STOPPED", "error": None,
                       "started_ts": None, "last_signal_ts": None}
@@ -91,6 +92,8 @@ class SignalEngine:
             self._tracker_task = asyncio.create_task(self._tracker())
         if not self._resync_task:
             self._resync_task = asyncio.create_task(self._cache_sync())
+        if not self._scan_task:
+            self._scan_task = asyncio.create_task(self._scan_loop())
 
     async def pause(self):
         self.paused = True
@@ -106,10 +109,10 @@ class SignalEngine:
         self.paused = False
         self.state["phase"] = "STOPPED"
         await self.feed.stop()
-        for t in (self._tracker_task, self._resync_task):
+        for t in (self._tracker_task, self._resync_task, self._scan_task):
             if t:
                 t.cancel()
-        self._tracker_task = self._resync_task = None
+        self._tracker_task = self._resync_task = self._scan_task = None
 
     # ---------------------------------------------------------- cache
 
@@ -145,6 +148,18 @@ class SignalEngine:
                 cds.append({"time": b, "open": p, "high": p,
                             "low": p, "close": p})
                 del cds[:-CANDLES_NEED]
+
+    async def _scan_loop(self):
+        """Scan em background a cada 60s — emite sinais mesmo sem UI aberta,
+        para a acertividade ser medida continuamente."""
+        await asyncio.sleep(20)   # deixa o feed fazer o bootstrap
+        while True:
+            try:
+                if self.running and not self.paused:
+                    await self.scan(min_conf=50)
+            except Exception as e:
+                log.warning("scan_loop: %s", e)
+            await asyncio.sleep(60)
 
     async def _cache_sync(self):
         """Copia as velas do feed para a cache do motor (a cada 3s)."""
