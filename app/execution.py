@@ -336,11 +336,16 @@ class RiskManager:
         await tradestore.set_config("risk_limits", self.limits)
 
     def _day_totals(self, day_rows):
-        losses = sum(1 for r in day_rows if r.get("result") == "loss")
-        lost_amt = sum(-(r.get("profit") or 0) for r in day_rows
+        # só contam operações que chegaram a compra real — sinais rejeitados
+        # antes do buy não gastam o limite diário
+        done = [r for r in day_rows
+                if r.get("state") in ("confirmed", "open", "buy_sent",
+                                      "settled")]
+        losses = sum(1 for r in done if r.get("result") == "loss")
+        lost_amt = sum(-(r.get("profit") or 0) for r in done
                        if (r.get("profit") or 0) < 0)
-        exposure = sum(r.get("stake") or 0 for r in day_rows)
-        return len(day_rows), lost_amt, exposure, losses
+        exposure = sum(r.get("stake") or 0 for r in done)
+        return len(done), lost_amt, exposure, losses
 
     def check(self, sig, open_count, day_rows):
         """(ok, motivo). Avaliado antes de cada compra."""
