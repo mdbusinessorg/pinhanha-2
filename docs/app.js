@@ -545,8 +545,8 @@ function notif(msg, bad) {
 
 function renderExec(st) {
   const a = st.account;
-  // cartão de ligação
-  $("accCard").style.display = st.authorized ? "none" : "block";
+  // cartão de ligação — sempre visível nas Definições
+  $("accCard").style.display = "block";
   $("accState").innerHTML = st.authorized
     ? `<span class="pill on">${a?.is_virtual ? "DEMO" : "REAL"}</span> <b>${a?.loginid || "?"}</b> · ${a?.currency || ""}`
     : `<span class="pill off">não ligado</span>`;
