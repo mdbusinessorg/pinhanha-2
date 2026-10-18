@@ -361,7 +361,7 @@ input:focus,select:focus{outline:none;border-color:var(--cy)}
           <button class="b ghost" style="padding:5px 9px" onclick="pcZoom(0)">Reset</button>
           <span style="flex:1"></span>
           <button class="b ghost" style="padding:5px 10px" title="Limites de risco" onclick="document.getElementById('pcLim').scrollIntoView({behavior:'smooth'})">⚙</button>
-          <button class="b go" id="pcPlay" style="padding:6px 12px" title="Ativar/pausar" onclick="pcToggle()">▶</button>
+          <button class="b go" id="pcPlay" style="padding:6px 14px;font-weight:700" title="Iniciar/parar o ciclo de execução" onclick="pcToggle()">▶ OPERAR</button>
           <button class="b stop" id="pcStop" style="padding:6px 12px" title="Paragem de emergência" onclick="emergency()">■</button>
         </div>
         <div class="pc-phases">
@@ -413,7 +413,8 @@ input:focus,select:focus{outline:none;border-color:var(--cy)}
       <h3 class="sec">Limites de Risco <span style="font-size:10px;color:var(--mut)">(verificados antes de cada compra · sem martingale)</span></h3>
       <div class="grid g4" id="limGrid"></div>
       <div style="margin-top:10px"><button class="b cy" onclick="saveLimits()">Guardar limites</button> <span id="limMsg" style="font-size:11px;color:var(--g)"></span></div>
-      <div id="lastOrder" style="margin-top:8px;font-size:11px;color:var(--mut)"></div>
+      <div id="lastSig" style="margin-top:8px;font-size:11px;color:var(--mut)"></div>
+      <div id="lastOrder" style="margin-top:4px;font-size:11px;color:var(--mut)"></div>
     </div>
 
     <!-- pipeline interno (auditoria — estados por sinal) -->

@@ -11,9 +11,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.execution import AutoTrader, RiskManager, DEFAULT_LIMITS
 
 
-def sig(conf=60, asset="V100", sid="s1"):
+def sig(conf=60, asset="V100", sid="s1", voters=("a", "b")):
     return {"sig_id": sid, "asset": asset, "signal": "call",
-            "confidence": conf, "watch": False, "price": 100.0}
+            "confidence": conf, "watch": False, "price": 100.0,
+            "voters": list(voters)}
 
 
 def mk_trader():
@@ -30,6 +31,7 @@ def mk_trader():
     t._rec_task = None
     t.last_error = None
     t.last_order = None
+    t.last_signal = None
     t.ws.account = {"loginid": "VRT123", "currency": "USD", "is_virtual": True,
                     "balance": 9999}
     return t
@@ -94,10 +96,20 @@ def test_dedup_same_sig():
     assert t.trades["s1"]["state"] == "open"      # não re-processa
 
 
-def test_watch_never_executes():
+def test_consensus_blocks():
+    """Sinal sem consenso (<2 votantes) nunca chega à execução."""
     t = mk_trader()
-    asyncio.run(t.on_signal({**sig(), "watch": True}))
+    asyncio.run(t.on_signal(sig(voters=("a",))))
     assert "s1" not in t.trades
+    assert t.last_signal["why"] == "consenso <2 votantes"
+
+
+def test_non_synthetic_skipped():
+    """Forex/crypto não executável (Deriv não oferece Rise/Fall 60s)."""
+    t = mk_trader()
+    asyncio.run(t.on_signal(sig(asset="EURUSD")))
+    assert "s1" not in t.trades
+    assert "sintéticos" in t.last_signal["why"]
 
 
 def test_disabled_blocks():
@@ -183,6 +195,52 @@ def test_pipeline_buy_timeout_no_retry():
     tr = t.trades["s1"]
     assert tr["state"] == "rejected"          # reconciliou e não achou contrato
     t.ws.buy.assert_awaited_once()            # UMA tentativa, sem retry
+
+
+def test_starts_stopped():
+    """§1: estado inicial sempre PARADO."""
+    assert AutoTrader(None).enabled is False
+
+
+def test_restore_stays_stopped():
+    """§5: estado ON guardado na BD não reactiva após reinício."""
+    import app.execution as ex
+    t = mk_trader()
+    t.enabled = False
+    t.ws = None
+    t.connect = AsyncMock(return_value=(True, None))
+    t.select_account = AsyncMock(return_value=(True, None))
+    t.reconcile = AsyncMock()
+    t.risk.load = AsyncMock()
+    async def cfg(k):
+        return {"deriv_token": "x", "deriv_loginid": "VRT123",
+                "autotrade_state": {"enabled": True,
+                                    "emergency": False}}.get(k)
+    orig = ex.tradestore.get_config
+    ex.tradestore.get_config = cfg
+    ex.tradestore.set_config = AsyncMock()
+    try:
+        asyncio.run(t.restore())
+    finally:
+        ex.tradestore.get_config = orig
+    assert t.enabled is False          # PARADO mesmo com ON guardado
+
+
+def test_stop_mid_pipeline():
+    """§1/§5: PARAR durante a proposta aborta antes do buy."""
+    t = mk_trader()
+    async def prop(*a, **kw):
+        t.enabled = False                       # PARAR a meio
+        return {"id": "p1", "ask_price": 1.0, "payout": 1.92}
+    t.ws.proposal = prop
+    t.ws.buy = AsyncMock()
+    import app.execution as ex
+    ex.tradestore.upsert_trade = AsyncMock()
+    ex.tradestore.list_trades = AsyncMock(return_value=[])
+    asyncio.run(t._pipeline(sig()))
+    assert t.trades["s1"]["state"] == "rejected"
+    assert "parado" in t.trades["s1"]["error"]
+    t.ws.buy.assert_not_called()
 
 
 def test_poc_settles():

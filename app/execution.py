@@ -395,6 +395,7 @@ class AutoTrader:
         self._rec_task = None
         self.last_error = None
         self.last_order = None
+        self.last_signal = None     # diagnóstico do último sinal avaliado
 
     # ---------------------------------------------------------- auth/estado
 
@@ -427,11 +428,9 @@ class AutoTrader:
             ok, err = await self.connect(token)
             if ok and loginid:
                 await self.select_account(loginid)
-                # repõe execução activa — foi activada explicitamente antes
-                # (select_account persistiu enabled=False; regravar)
-                if st and st.get("enabled") and not self.emergency:
-                    self.enabled = True
-                    await self._persist_state()
+            # arranque SEMPRE PARADO — o estado ON guardado não reactiva
+            # a execução (spec §1/§5); só a emergência é restaurada
+            self.enabled = False
             await self.reconcile()
 
     async def select_account(self, loginid):
@@ -486,24 +485,37 @@ class AutoTrader:
 
     async def on_signal(self, sig):
         """Callback do engine: nova oportunidade emitida."""
+        def skip(why):
+            self.last_signal = {"ts": time.time(), "asset": sig.get("asset"),
+                                "signal": sig.get("signal"),
+                                "conf": sig.get("confidence"),
+                                "voters": len(sig.get("voters") or []),
+                                "why": why}
         if not self.enabled or self.emergency or not self.ws:
+            skip("parado" if not self.emergency else "emergência")
             return
         if self.mode is None:
+            skip("sem conta seleccionada")
             return
         # consenso mínimo — a grade forte/válido exige histórico calibrado
         # que os sintéticos nunca teriam (só eles executam → deadlock).
         if len(sig.get("voters") or []) < 2:
+            skip("consenso <2 votantes")
             return
         # Rise/Fall 60s só é oferecido nos índices sintéticos — forex/crypto
         # são rejeitados pela Deriv ("Trading is not offered"). Ignorar já aqui.
         if asset_cls(sig.get("asset")) != "synthetic":
+            skip("ativo não executável (só sintéticos)")
             return
         sf = self.risk.limits.get("strategy_filter")
         if sf and sf not in (sig.get("voters") or []):
+            skip(f"estratégia {sf} não votou")
             return   # estratégia seleccionada no painel não votou neste sinal
         sig_id = sig.get("sig_id")
         if not sig_id or sig_id in self._busy or sig_id in self.trades:
             return
+        skip(None)   # elegível — em pipeline
+        self.last_signal["why"] = "em pipeline"
         self._busy.add(sig_id)
         asyncio.create_task(self._pipeline(sig))
 
@@ -572,7 +584,12 @@ class AutoTrader:
                 await tradestore.upsert_trade(t)
                 return
 
-            # 5. buy
+            # 5. PARAR a meio da proposta — não comprar
+            if not self.enabled or self.emergency:
+                t.update(state="rejected", error="parado durante a proposta")
+                self.trades[sig_id] = t
+                await tradestore.upsert_trade(t)
+                return
             t["state"] = "buy_sent"
             self.last_order = {"id": sig_id, "ts": time.time(),
                                "symbol": sym, "type": ctype, "stake": ask}
@@ -705,6 +722,7 @@ class AutoTrader:
             "enabled": self.enabled,
             "emergency": self.emergency,
             "mode": self.mode,
+            "last_signal": self.last_signal,
             "account": {k: acct.get(k) for k in
                         ("loginid", "currency", "balance", "is_virtual",
                          "fullname", "scopes")} if acct else None,

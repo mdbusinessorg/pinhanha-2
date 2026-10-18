@@ -569,7 +569,12 @@ function renderExec(st) {
   if (st.host) ex.push(`<span class="disc" style="margin:0">${st.host}</span>`);
   $("exState").innerHTML = ex.join(" ");
   $("exErr").textContent = st.last_error || "";
-  $("pcPlay").textContent = st.enabled ? "⏸" : "▶";
+  $("pcPlay").textContent = st.enabled ? "■ PARAR" : "▶ OPERAR";
+  $("pcPlay").className = "b " + (st.enabled ? "stop" : "go");
+  const ls = st.last_signal;
+  $("lastSig").textContent = ls
+    ? `último sinal: ${ls.asset || "?"} ${ls.signal || ""} · conf ${ls.conf ?? "—"}% · votos ${ls.voters ?? 0} · ${ls.why || "avaliado"}`
+    : "";
   const lo = st.last_order;
   $("lastOrder").textContent = lo
     ? `última ordem: ${lo.symbol} ${lo.type} stake ${lo.stake} contrato ${lo.contract_id || "—"} · estado ${lo.state || ""}`
