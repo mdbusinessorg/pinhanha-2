@@ -148,6 +148,7 @@ input:focus,select:focus{outline:none;border-color:var(--cy)}
     <button data-p="strats" onclick="go('strats')">◈&nbsp; Estratégias</button>
     <button data-p="hist" onclick="go('hist')">◷&nbsp; Histórico</button>
     <button data-p="anal" onclick="go('anal')">↗&nbsp; Análise de Mercado</button>
+    <button data-p="exec" onclick="go('exec')">⇉&nbsp; Execução</button>
     <button data-p="cfg" onclick="go('cfg')">⚙&nbsp; Definições</button>
   </nav>
   <div class="sidefoot">
@@ -280,6 +281,58 @@ input:focus,select:focus{outline:none;border-color:var(--cy)}
   </section>
 
   <!-- ================= DEFINIÇÕES ================= -->
+  <!-- ================= EXECUÇÃO ================= -->
+  <section class="page" id="p-exec">
+    <div class="grid g2">
+      <div class="card">
+        <h3 class="sec">Conta Deriv</h3>
+        <div id="accState" style="margin-bottom:10px"></div>
+        <div id="accForm">
+          <label>API token oficial — app.deriv.com → Settings → API token (scope: <b>Trade</b>)</label>
+          <input id="dToken" type="password" placeholder="cola aqui o token (nunca a password)">
+          <div style="margin-top:10px;display:flex;gap:8px">
+            <button class="b cy" onclick="connectDeriv()">⇄ Ligar conta Deriv</button>
+          </div>
+          <p class="disc">O token fica apenas no backend — nunca no browser nem em logs. Escolhe só o scope Trade.</p>
+        </div>
+        <div id="accList" style="margin-top:10px"></div>
+        <div id="accPick" style="margin-top:10px;display:none">
+          <label id="realCk" style="display:none"><input type="checkbox" id="ckReal"> Confirmo negociar com dinheiro REAL</label>
+          <div style="margin-top:8px;display:flex;gap:8px">
+            <button class="b ghost" onclick="disconnectDeriv()">Revogar / desligar</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h3 class="sec">Execução Automática</h3>
+        <div id="exState" style="font-size:12px;color:var(--mut);margin-bottom:10px"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="b go" id="btnAuto" onclick="autoCtl(true)">▶ Ativar execução automática</button>
+          <button class="b pause" onclick="autoCtl(false)">⏸ Pausar</button>
+          <button class="b stop" onclick="emergency()">🛑 Paragem de emergência</button>
+        </div>
+        <div id="exErr" style="margin-top:8px;font-size:11px;color:var(--r)"></div>
+        <div class="grid g4" style="margin-top:12px">
+          <div class="kpi"><span>Abertas</span><b id="kOpen">0</b></div>
+          <div class="kpi"><span>P/L realizado</span><b id="kReal">0.00</b></div>
+          <div class="kpi"><span>P/L flutuante</span><b id="kUnreal">0.00</b></div>
+          <div class="kpi"><span>Perdas seguidas</span><b id="kConsec">0</b></div>
+        </div>
+        <div id="lastOrder" style="margin-top:8px;font-size:11px;color:var(--mut)"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3 class="sec">Limites de Risco <span style="font-size:10px;color:var(--mut)">(verificados antes de cada compra · sem martingale)</span></h3>
+      <div class="grid g4" id="limGrid"></div>
+      <div style="margin-top:10px"><button class="b cy" onclick="saveLimits()">Guardar limites</button> <span id="limMsg" style="font-size:11px;color:var(--g)"></span></div>
+    </div>
+    <div class="card">
+      <h3 class="sec">Operações</h3>
+      <table><thead><tr><th>Hora</th><th>Símbolo</th><th>Tipo</th><th>Stake</th><th>Estado</th><th>Contrato</th><th>P/L</th><th>Erro</th></tr></thead>
+      <tbody id="trBody"></tbody></table>
+    </div>
+  </section>
+
   <section class="page" id="p-cfg">
     <div class="grid g2">
       <div class="card">

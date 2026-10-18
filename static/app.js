@@ -10,7 +10,9 @@ async function api(path, body) {
     body: body ? JSON.stringify(body) : undefined,
   });
   if (r.status === 401) { showLogin(); throw new Error("401"); }
-  return r.json();
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.detail || "HTTP " + r.status);
+  return d;
 }
 function showLogin() { $("loginScr").style.display = "flex"; $("app").style.display = "none"; }
 async function login() {
@@ -29,6 +31,7 @@ const PAGES = {
   strats: ["Biblioteca de Estratégias", "Todas as estratégias do motor — com acerto medido ao vivo"],
   hist:   ["Histórico de Sinais", "Sinais avaliados — live e importados do PINHANHA 1"],
   anal:   ["Análise de Mercado", "Gráfico, indicadores, padrões e dígitos por ativo"],
+  exec:   ["Execução Automática", "Conta Deriv, limites de risco e operações reais"],
   cfg:    ["Definições", "Ligação Deriv e varredura"],
 };
 function go(p) {
@@ -38,6 +41,7 @@ function go(p) {
   if (p === "strats") renderStrats();
   if (p === "hist") loadHistory();
   if (p === "anal") loadAnalysis();
+  if (p === "exec") loadExec();
   if (p === "cfg") loadCfg();
 }
 
@@ -329,6 +333,146 @@ async function loadDiag() {
   $("diagOut").textContent = "a carregar diagnóstico…";
   const d = await api("/api/sigdiag");
   $("diagOut").textContent = JSON.stringify(d, null, 1).slice(0, 4000);
+}
+
+// --------------------------------------------------------- execução auto
+const LIM_FIELDS = [
+  ["stake", "Stake por operação"], ["stake_min", "Stake mín."],
+  ["stake_max", "Stake máx."], ["max_open", "Máx. abertas"],
+  ["max_per_day", "Máx. ops/dia"], ["daily_loss_limit", "Perda diária máx."],
+  ["consec_loss_limit", "Perdas seguidas máx."], ["daily_exposure", "Exposição diária máx."],
+  ["min_payout", "Payout mín."], ["min_conf", "Conf. mín. p/ executar"],
+  ["duration_s", "Duração (s)"], ["pause_after_errors", "Pausa após falhas"],
+];
+let _execT = null;
+
+async function loadExec() {
+  try {
+    const st = await api("/api/autotrade/status");
+    renderExec(st);
+    const tr = await api("/api/trades?limit=60");
+    renderTrades(tr.trades || []);
+    if (!_execT) _execT = setInterval(async () => {
+      if (!document.getElementById("p-exec").classList.contains("on")) return;
+      try { renderExec(await api("/api/autotrade/status"));
+            renderTrades((await api("/api/trades?limit=60")).trades || []); } catch (e) {}
+    }, 5000);
+  } catch (e) { $("exErr").textContent = String(e); }
+}
+
+function renderExec(st) {
+  const a = st.account;
+  $("accState").innerHTML = st.authorized
+    ? `<span class="pill on">${a?.is_virtual ? "DEMO" : "REAL"}</span> ` +
+      `<b>${a?.loginid || "?"}</b> · ${a?.currency || ""} · saldo <b>${a?.balance ?? "?"}</b>` +
+      `<div style="font-size:11px;color:var(--mut);margin-top:4px">host ${st.host || "—"} · scopes: ${(a?.scopes || []).join(", ") || "—"}</div>`
+    : `<span class="pill off">não ligado</span>`;
+  $("accForm").style.display = st.authorized ? "none" : "block";
+  const has = (st.accounts || []).length > 0;
+  $("accPick").style.display = has ? "block" : "none";
+  $("accList").innerHTML = (st.accounts || []).map(x => {
+    const sel = a && a.loginid === x.loginid;
+    const needCk = !x.is_virtual;
+    return `<div style="display:flex;align-items:center;gap:8px;margin:6px 0;padding:8px;border:1px solid var(--bdr);border-radius:8px">
+      <span class="pill ${x.is_virtual ? "cy" : "on"}">${x.is_virtual ? "DEMO" : "REAL"}</span>
+      <b class="mono">${x.loginid}</b> <span style="color:var(--mut)">${x.currency} · ${x.balance ?? "?"}</span>
+      ${sel ? '<span style="color:var(--g);font-size:11px">● activa</span>'
+             : `<button class="b ghost" style="padding:4px 10px" onclick="pickAcc('${x.loginid}',${needCk})">usar</button>`}
+    </div>`;
+  }).join("");
+  const hasReal = (st.accounts || []).some(x => !x.is_virtual);
+  $("realCk").style.display = hasReal ? "block" : "none";
+  const ex = [];
+  ex.push(st.enabled ? '<span class="pill on">ATIVA</span>'
+                     : '<span class="pill off">OFF</span>');
+  if (st.emergency) ex.push('<span class="pill" style="background:var(--r);color:#000">EMERGÊNCIA</span>');
+  if (st.mode) ex.push(`<span class="pill cy">${st.mode.toUpperCase()}</span>`);
+  $("exState").innerHTML = ex.join(" ");
+  $("exErr").textContent = st.last_error || "";
+  $("kOpen").textContent = st.open;
+  $("kReal").textContent = (st.realized_pl || 0).toFixed(2);
+  $("kUnreal").textContent = (st.unrealized_pl || 0).toFixed(2);
+  $("kConsec").textContent = st.consec_losses || 0;
+  $("btnAuto").textContent = st.enabled ? "✓ Execução activa" : "▶ Ativar execução automática";
+  const lo = st.last_order;
+  $("lastOrder").textContent = lo
+    ? `última ordem: ${lo.symbol} ${lo.type} stake ${lo.stake} contrato ${lo.contract_id || "—"}`
+    : "";
+  $("limGrid").innerHTML = LIM_FIELDS.map(([k, lbl]) =>
+    `<div><label style="font-size:11px">${lbl}</label>
+     <input id="lim_${k}" type="number" step="any" value="${st.limits?.[k] ?? ""}"></div>`).join("");
+}
+
+function renderTrades(trades) {
+  const fmt = t => new Date((t.emit_ts || 0) * 1000).toLocaleTimeString("pt-PT");
+  const stc = {settled: "var(--g)", open: "var(--cy)", rejected: "var(--r)",
+               buy_sent: "#eab308", confirmed: "#eab308", proposal: "#eab308",
+               validated: "var(--mut)", candidate: "var(--mut)"};
+  $("trBody").innerHTML = trades.length ? trades.map(t => `<tr>
+    <td>${fmt(t)}</td><td class="mono">${t.symbol || t.asset || ""}</td>
+    <td>${t.contract_type || t.signal || ""}</td><td>${t.stake ?? ""}</td>
+    <td><span class="pill" style="color:${stc[t.state] || "var(--mut)"}">${t.state}</span></td>
+    <td class="mono" style="font-size:11px">${t.contract_id || ""}</td>
+    <td style="color:${(t.profit || 0) >= 0 ? "var(--g)" : "var(--r)"}">${t.profit != null ? t.profit.toFixed(2) : ""}</td>
+    <td style="font-size:11px;color:var(--mut)">${t.error || ""}</td></tr>`).join("")
+    : `<tr><td colspan="8" class="sk">sem operações</td></tr>`;
+}
+
+async function connectDeriv() {
+  const tok = $("dToken").value.trim();
+  if (!tok) { $("exErr").textContent = "cola o API token"; return; }
+  $("exErr").textContent = "a autorizar…";
+  try {
+    const st = await api("/api/deriv/connect", {token: tok});
+    $("dToken").value = "";
+    renderExec(st);
+  } catch (e) { $("exErr").textContent = String(e); }
+}
+
+async function pickAcc(loginid, needReal) {
+  if (needReal && !$("ckReal").checked) {
+    $("exErr").textContent = "conta REAL — marca a confirmação primeiro";
+    return;
+  }
+  try {
+    const st = await api("/api/deriv/select",
+                         {loginid, confirm_real: needReal});
+    renderExec(st);
+  } catch (e) { $("exErr").textContent = String(e); }
+}
+
+async function disconnectDeriv() {
+  try { await api("/api/deriv/disconnect", {}); loadExec(); }
+  catch (e) { $("exErr").textContent = String(e); }
+}
+
+async function autoCtl(on) {
+  $("exErr").textContent = "";
+  try {
+    const st = await api("/api/autotrade/enable", {on});
+    renderExec(st);
+  } catch (e) { $("exErr").textContent = String(e); }
+}
+
+async function emergency() {
+  try {
+    const st = await api("/api/autotrade/emergency", {on: true});
+    renderExec(st);
+  } catch (e) { $("exErr").textContent = String(e); }
+}
+
+async function saveLimits() {
+  const patch = {};
+  LIM_FIELDS.forEach(([k]) => {
+    const v = parseFloat($("lim_" + k).value);
+    if (!isNaN(v)) patch[k] = v;
+  });
+  try {
+    const st = await api("/api/autotrade/limits", {limits: patch});
+    renderExec(st);
+    $("limMsg").textContent = "guardado ✓";
+    setTimeout(() => $("limMsg").textContent = "", 2500);
+  } catch (e) { $("exErr").textContent = String(e); }
 }
 
 async function refresh() { await loadStatus(); await loadSignals(); await loadStats(); }

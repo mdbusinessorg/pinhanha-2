@@ -16,6 +16,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import sigstore
+from . import execution
+from . import tradestore
 from .analytics import market_analysis
 from .assets import ASSETS, SCAN_ASSETS, deriv_symbol, asset_cls, asset_label, is_247
 from .backtest import run_backtest
@@ -30,11 +32,19 @@ app = FastAPI(title="PINHANHA 2.0 — Sinais Deriv")
 STATIC = Path(__file__).resolve().parent.parent / "static"
 
 
+trader = execution.init(engine)
+
+
 @app.on_event("startup")
 async def _startup():
-    """Arranca o motor de sinais no boot — plataforma de análise, sem
-    execução financeira; o utilizador pode pausar/parar no painel."""
+    """Arranca o motor de sinais no boot; repõe ligação Deriv autorizada
+    (se existir) e reconcilia trades pendentes. Execução desligada por
+    defeito."""
     await engine.start()
+    try:
+        await trader.restore()
+    except Exception:
+        logging.getLogger("exec").exception("restore")
 
 
 BOT_PASSWORD = os.getenv("BOT_PASSWORD", "devin")
@@ -284,6 +294,98 @@ async def backtest(b: BacktestReq, _=Depends(auth)):
 @app.get("/api/knowledge")
 def knowledge(_=Depends(auth)):
     return KNOWLEDGE
+
+
+# ------------------------------------------------------------- execução
+
+class ConnectBody(BaseModel):
+    token: str
+
+
+@app.post("/api/deriv/connect")
+async def deriv_connect(b: ConnectBody, _=Depends(auth)):
+    """Autoriza a conta Deriv com o API token oficial (app.deriv.com →
+    Settings → API token, scope Trade). O token fica só no backend."""
+    tok = b.token.strip()
+    if len(tok) < 10:
+        raise HTTPException(400, "token inválido")
+    ok, err = await trader.connect(tok)
+    if not ok:
+        raise HTTPException(400, f"autorização falhou: {err}")
+    return trader.status()
+
+
+class SelectBody(BaseModel):
+    loginid: str
+    confirm_real: bool = False
+
+
+@app.post("/api/deriv/select")
+async def deriv_select(b: SelectBody, _=Depends(auth)):
+    """Selecciona a conta activa. REAL exige confirm_real=true — confirmação
+    explícita de negociar com dinheiro real (spec §3/§8)."""
+    if not trader.ws:
+        raise HTTPException(400, "sem ligação Deriv")
+    tgt = next((a for a in trader.ws.accounts
+                if a.get("loginid") == b.loginid), None)
+    if tgt is None:
+        raise HTTPException(400, "conta não está autorizada")
+    if not tgt.get("is_virtual") and not b.confirm_real:
+        raise HTTPException(400, "conta REAL — confirma com confirm_real=true")
+    ok, err = await trader.select_account(b.loginid)
+    if not ok:
+        raise HTTPException(400, err)
+    return trader.status()
+
+
+@app.post("/api/deriv/disconnect")
+async def deriv_disconnect(_=Depends(auth)):
+    """Revoga o acesso: desliga WS, apaga token e conta guardados."""
+    await trader.disconnect()
+    return {"ok": True}
+
+
+@app.get("/api/autotrade/status")
+async def autotrade_status(_=Depends(auth)):
+    return trader.status()
+
+
+class ToggleBody(BaseModel):
+    on: bool
+
+
+@app.post("/api/autotrade/enable")
+async def autotrade_enable(b: ToggleBody, _=Depends(auth)):
+    ok, err = await trader.set_enabled(b.on)
+    if not ok:
+        raise HTTPException(400, err)
+    return trader.status()
+
+
+@app.post("/api/autotrade/emergency")
+async def autotrade_emergency(b: ToggleBody, _=Depends(auth)):
+    await trader.set_emergency(b.on)
+    return trader.status()
+
+
+class LimitsBody(BaseModel):
+    limits: dict
+
+
+@app.post("/api/autotrade/limits")
+async def autotrade_limits(b: LimitsBody, _=Depends(auth)):
+    await trader.risk.save(b.limits or {})
+    return trader.status()
+
+
+@app.get("/api/trades")
+async def trades_ep(limit: int = 100, _=Depends(auth)):
+    rows = await tradestore.list_trades(limit=limit)
+    mem = list(trader.trades.values())
+    seen = {r["id"] for r in rows}
+    merged = rows + [m for m in mem if m["id"] not in seen]
+    merged.sort(key=lambda r: r.get("emit_ts") or 0, reverse=True)
+    return {"trades": merged[:limit]}
 
 
 app.mount("/static", StaticFiles(directory=STATIC), name="static")

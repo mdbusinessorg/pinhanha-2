@@ -53,6 +53,7 @@ class SignalEngine:
         self._tracker_task = None
         self._resync_task = None
         self._scan_task = None
+        self.on_signal = None   # callback do AutoTrader (execução)
         self.bad_assets = {}
         self.state = {"phase": "STOPPED", "error": None,
                       "started_ts": None, "last_signal_ts": None}
@@ -217,6 +218,14 @@ class SignalEngine:
         if new:
             self.state["last_signal_ts"] = now
             asyncio.create_task(sigstore.save_emitted(new))
+            if self.on_signal:
+                for r in rows:
+                    sid = r.get("sig_id") or f"{r['asset']}-{r['signal']}-{int(now)}"
+                    if sid in {n["id"] for n in new}:
+                        try:
+                            self.on_signal(r)
+                        except Exception as e:
+                            log.warning("on_signal: %s", e)
 
     def _sig_evaluate(self):
         """Avalia sinais vencidos: primeira vela fechada >= due (igual ao original)."""
