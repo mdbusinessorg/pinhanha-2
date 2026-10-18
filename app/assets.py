@@ -44,9 +44,9 @@ ASSETS = {
     "XAUUSD":   ("frxXAUUSD", "forex", "Ouro / Dólar",        "seg-sex"),
 }
 
-# ativos na varredura de sinais — apenas forex (pedido do dono:
-# só pares forex têm sinais; fecham ao fim de semana)
-SCAN_ASSETS = [a for a, (_, c, _, _) in ASSETS.items() if c == "forex"]
+# ativos na varredura de sinais — sintéticos (o "OTC" da Deriv, 24/7)
+# + forex. Cripto fora (acertividade medida fraca ~50%).
+SCAN_ASSETS = [a for a, (_, c, _, _) in ASSETS.items() if c != "crypto"]
 
 
 def deriv_symbol(asset):
