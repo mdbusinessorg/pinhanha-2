@@ -402,7 +402,10 @@ class AutoTrader:
         """Autoriza a conta Deriv e guarda o token no backend."""
         if self.ws:
             await self.ws.disconnect()
-        ws = DerivExecWS(token, app_id=self.engine.feed.app_id)
+        import os
+        ws = DerivExecWS(
+            token,
+            app_id=os.getenv("DERIV_APP_ID", "1089"))
         ok = await ws.connect()
         if not ok:
             self.last_error = ws.last_error

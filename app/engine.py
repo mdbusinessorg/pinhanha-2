@@ -37,7 +37,9 @@ CANDLES_NEED = 100
 
 class SignalEngine:
     def __init__(self):
-        app_id = os.getenv("DERIV_APP_ID", "1089")
+        # feed público: app_id CLÁSSICO numérico (a API antiga rejeita o
+        # App ID alfanumérico do developers.deriv.com)
+        app_id = os.getenv("DERIV_FEED_APP_ID", "1089")
         self.feed = DerivFeed([deriv_symbol(a) for a in SCAN_ASSETS
                                if deriv_symbol(a)],
                               app_id=app_id, n_candles=CANDLES_NEED)
