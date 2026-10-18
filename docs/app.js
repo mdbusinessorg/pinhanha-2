@@ -43,7 +43,7 @@ function go(p) {
   if (p === "strats") renderStrats();
   if (p === "hist") loadHistory();
   if (p === "anal") loadAnalysis();
-  if (p === "lab") loadLab();
+  if (p === "lab") { loadLab(); loadLabFx(); }
   if (p === "exec") loadExec();
   if (p === "cfg") loadCfg();
 }
@@ -716,4 +716,21 @@ function renderLabTicks() {
       `${k.padStart(4)}t ↑${x.up} ↓${x.down} p_up ${x.p_up}±${x.se} streak ${x.max_streak} acel ${x.accel}`).join("\n") +
     `\nregime: ${d.regime?.detected ? "MUDANÇA" : "estável"} (vol×${d.regime?.vol_ratio ?? "?"})` +
     `\nfalso rompimento: ↑${d.false_break?.up?"sim":"não"} ↓${d.false_break?.down?"sim":"não"}`;
+}
+
+async function loadLabFx() {
+  try {
+    const [sy, lab] = await Promise.all([
+      api("https://stqhksrmcysuuigwzaoa.supabase.co/functions/v1/p2-panel/api/forex_symbols"), api("https://stqhksrmcysuuigwzaoa.supabase.co/functions/v1/p2-panel/api/forex_lab")]);
+    $("labFxInfo").textContent = sy.n != null
+      ? `${sy.n} pares Forex validados via active_symbols (market=forex) · ${lab.n_variants ?? "?"} variantes forex`
+      : "a descobrir pares…";
+    const lines = Object.entries(lab.assets || {}).map(([a, r]) => {
+      if (r.verdict !== "ENTRADA")
+        return `${a}: SEM ENTRADA — ${r.reason}`;
+      return `${a}: ` + r.signals.map(s =>
+        `${s.signal.toUpperCase()} ${s.id} (wr ${(s.wr*100).toFixed(0)}% n${s.n})`).join(" · ");
+    });
+    $("labFx").textContent = lines.join("\n") || "a calcular…";
+  } catch (e) {}
 }

@@ -22,6 +22,7 @@ from . import execution
 from . import streaks
 from . import tickmind
 from . import variants as vmod
+from . import forex_engine as fx
 from .analytics import market_analysis
 from .assets import (ASSETS, SCAN_ASSETS, deriv_symbol, asset_cls,
                      asset_label, is_247)
@@ -121,6 +122,27 @@ async def _publish():
                 "ts": time.time()})
         except Exception:
             log.exception("variants")
+        # ---------- real_forex_engine ----------
+        try:
+            fx_syms = await fx.discover_forex(engine.feed)
+            await sigstore.state_put("forex_symbols", {
+                "n": len(fx_syms), "symbols": fx_syms,
+                "validated": all(s["market"] == "forex" for s in fx_syms),
+                "ts": time.time()})
+        except Exception:
+            log.exception("forex_symbols")
+        try:
+            fx_out = {}
+            for a in SCAN_ASSETS:
+                if asset_cls(a) != "forex":
+                    continue
+                cds = (engine.cache.get(a) or {}).get("candles") or []
+                fx_out[a] = fx.scan(cds)
+            await sigstore.state_put("forex_lab", {
+                "assets": fx_out,
+                "n_variants": len(fx.FOREX_VARIANTS), "ts": time.time()})
+        except Exception:
+            log.exception("forex_lab")
 
 
 # ------------------------------------------------------------------ cmds
