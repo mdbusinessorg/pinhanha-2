@@ -5,7 +5,12 @@ Deriv (WebSocket). O motor de estratégias é uma cópia directa do PINHANHA
 original (15 votantes + calibração por acertividade medida + Groq) — ver
 `docs/AUDIT_PINHANHA.md`.
 
-**Não executa ordens financeiras** — fase de sinais apenas.
+**Execução automática opcional**: a fase de sinais funciona sem conta. Para
+executar na tua conta Deriv, liga um API token (app.deriv.com → Settings →
+API token, scope **Trade**) na página **Execução**, escolhe DEMO ou REAL e
+activa — o RiskManager verifica os limites antes de cada compra e o botão de
+emergência bloqueia novas entradas de imediato. Sem martingale, stake fixa,
+idempotente por sinal. REAL exige confirmação explícita.
 
 ## Arranque
 

@@ -21,6 +21,21 @@
 - Nota: free tier Supabase limita a 2 projectos activos — a BD independente
   foi criada como tabela dedicada noutro projecto existente.
 
+## Execução automática (fase 2)
+
+- `app/execution.py`: `DerivExecWS` (WS autorizado próprio — authorize →
+  proposal → buy → proposal_open_contract), `RiskManager`, `AutoTrader`,
+  reconciliação via `portfolio`.
+- Tabelas: `pinhanha2_trades` (estados candidate→…→settled/rejected),
+  `pinhanha2_config` (token Deriv, conta, limites, estado — service_role only;
+  o token nunca sai do backend nem aparece em logs).
+- Endpoints: `/api/deriv/connect|select|disconnect`,
+  `/api/autotrade/status|enable|emergency|limits`, `/api/trades`.
+- Auth: API token do utilizador (app.deriv.com → Settings → API token,
+  scope Trade). OAuth exige app próprio registado — pendente de o user
+  registar um `app_id` em api.deriv.com se quiser OAuth.
+- REAL bloqueado por `confirm_real` + conta `is_virtual=false`.
+
 ## Env vars configuradas
 
 `BOT_PASSWORD` (aleatória), `GROQ_API_KEY`, `SUPABASE_URL`,
