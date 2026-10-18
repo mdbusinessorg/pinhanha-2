@@ -17,10 +17,27 @@ from . import variants as vmod
 # ------------------------------------------------------------------ FASE 1
 # descoberta dinâmica — active_symbols (market == "forex")
 
+async def _active_symbols(feed):
+    """active_symbols via WS do feed; fallback: ligação WS dedicada
+    (o feed pode estar em modo 'poll' sem ws aberto)."""
+    req = {"active_symbols": "brief", "product_type": "basic"}
+    try:
+        return await feed._send(req)
+    except Exception:
+        pass
+    import websockets
+    app_id = getattr(feed, "app_id", None) or 1089
+    async with websockets.connect(
+            f"wss://ws.derivws.com/websockets/v3?app_id={app_id}") as ws:
+        await ws.send(__import__("json").dumps({**req, "req_id": 1}))
+        import json as _json
+        return _json.loads(await ws.recv())
+
+
 async def discover_forex(feed):
     """Pede `active_symbols` à API Deriv e devolve só os instrumentos cujo
     campo `market` é forex — nunca por nome."""
-    res = await feed._send({"active_symbols": "brief", "product_type": "basic"})
+    res = await _active_symbols(feed)
     out = []
     for s in res.get("active_symbols") or []:
         if (s.get("market") or "").lower() not in ("forex",):
