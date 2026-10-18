@@ -22,7 +22,7 @@ import urllib.error
 import websockets
 
 from . import tradestore
-from .assets import deriv_symbol
+from .assets import deriv_symbol, asset_cls
 from .deriv_feed import WS_HOSTS
 
 log = logging.getLogger("exec")
@@ -484,6 +484,10 @@ class AutoTrader:
         if not self.enabled or self.emergency or not self.ws:
             return
         if self.mode is None or sig.get("watch"):
+            return
+        # Rise/Fall 60s só é oferecido nos índices sintéticos — forex/crypto
+        # são rejeitados pela Deriv ("Trading is not offered"). Ignorar já aqui.
+        if asset_cls(sig.get("asset")) != "synthetic":
             return
         sf = self.risk.limits.get("strategy_filter")
         if sf and sf not in (sig.get("voters") or []):

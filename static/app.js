@@ -2,6 +2,7 @@
 const $ = id => document.getElementById(id);
 let TOKEN = localStorage.p2tok || "";
 let STRATS = {}, ASSETS = [];
+let _tradesCache = [];
 
 async function api(path, body) {
   const r = await fetch(path, {
@@ -356,7 +357,9 @@ async function loadExec() {
     _st = st; renderExec(st);
     refreshRealOps();
     const tr = await api("/api/trades?limit=60");
-    renderTrades(tr.trades || []);
+    _tradesCache = tr.trades || [];
+    renderTrades(_tradesCache);
+    refreshRealOps();
     if (!_digAssets.length) {
       const as = await api("/api/assets");
       _digAssets = (as || []).filter(a => a.cls === "synthetic");
@@ -373,7 +376,8 @@ async function loadExec() {
       if (!document.getElementById("p-exec").classList.contains("on")) return;
       try { _st = await api("/api/autotrade/status"); renderExec(_st);
             refreshRealOps();
-            renderTrades((await api("/api/trades?limit=60")).trades || []);
+            _tradesCache = (await api("/api/trades?limit=60")).trades || [];
+            renderTrades(_tradesCache);
             loadDigits(); } catch (e) {}
     }, 5000);
   } catch (e) { $("exErr").textContent = String(e); }
@@ -394,14 +398,21 @@ function shortToType(sc) {
   return p.length >= 2 ? `${p[0]} · ${p[1]}` : (sc || "—");
 }
 
+function tradeTypeFor(cid) {
+  // profit_table não devolve shortcode — cruzar com o pipeline interno
+  const t = (_tradesCache || []).find(x => String(x.contract_id) === String(cid));
+  return t ? `${(t.signal || "").toUpperCase()} · ${t.asset}` : null;
+}
+
 function renderDerivOps(contracts, txs) {
   const rows = [];
   for (const c of contracts)
-    rows.push({type: shortToType(c.shortcode) || c.contract_type,
+    rows.push({type: shortToType(c.shortcode) || tradeTypeFor(c.contract_id) || c.contract_type,
                ts: c.purchase_time, price: c.buy_price,
                res: c.profit != null ? +c.profit : null, open: true});
   for (const t of txs)
-    rows.push({type: shortToType(t.shortcode), ts: t.sell_time || t.purchase_time,
+    rows.push({type: shortToType(t.shortcode) || tradeTypeFor(t.contract_id),
+               ts: t.sell_time || t.purchase_time,
                price: t.buy_price,
                res: t.sell_price != null ? +(t.sell_price - t.buy_price).toFixed(2) : null,
                open: false});
