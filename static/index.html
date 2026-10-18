@@ -185,6 +185,7 @@ input:focus,select:focus{outline:none;border-color:var(--cy)}
     <button data-p="strats" onclick="go('strats')">◈&nbsp; Estratégias</button>
     <button data-p="hist" onclick="go('hist')">◷&nbsp; Histórico</button>
     <button data-p="anal" onclick="go('anal')">↗&nbsp; Análise de Mercado</button>
+    <button data-p="lab" onclick="go('lab')">⚗&nbsp; Laboratório</button>
     <button data-p="exec" onclick="go('exec')">⇉&nbsp; Execução</button>
     <button data-p="cfg" onclick="go('cfg')">⚙&nbsp; Definições</button>
   </nav>
@@ -402,6 +403,28 @@ input:focus,select:focus{outline:none;border-color:var(--cy)}
       <h3 class="sec">Pipeline interno <span style="font-size:10px;color:var(--mut)">(estados candidato→settled — auditoria)</span></h3>
       <table><thead><tr><th>Hora</th><th>Símbolo</th><th>Tipo</th><th>Stake</th><th>Estado</th><th>Contrato</th><th>P/L</th><th>Erro</th></tr></thead>
       <tbody id="trBody"></tbody></table>
+    </div>
+  </section>
+
+  <!-- ================= LABORATÓRIO ================= -->
+  <section class="page" id="p-lab">
+    <div class="grid g3" id="labKpis"></div>
+    <div class="grid g2">
+      <div class="card">
+        <h3 class="sec">Top variantes <span style="font-size:10px;color:var(--mut)">(acertividade medida no histórico)</span></h3>
+        <div id="labVarInfo" style="font-size:11px;color:var(--mut);margin-bottom:8px"></div>
+        <table><thead><tr><th>Variante</th><th>Família</th><th>Ativo</th><th>N</th><th>WR%</th></tr></thead>
+        <tbody id="labVarBody"></tbody></table>
+      </div>
+      <div class="card">
+        <h3 class="sec">Sequências (missão 20 wins)</h3>
+        <div id="labStreaks" style="font-size:12px"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3 class="sec">Análise de ticks <span style="font-size:10px;color:var(--mut)">(5–1000 ticks, por ativo)</span></h3>
+      <select id="labTickAsset" onchange="renderLabTicks()" style="margin-bottom:10px"></select>
+      <div id="labTicks" style="font-size:12px;white-space:pre-wrap"></div>
     </div>
   </section>
 

@@ -19,6 +19,9 @@ from . import patterns
 from . import sigstore
 from . import tradestore
 from . import execution
+from . import streaks
+from . import tickmind
+from . import variants as vmod
 from .analytics import market_analysis
 from .assets import (ASSETS, SCAN_ASSETS, deriv_symbol, asset_cls,
                      asset_label, is_247)
@@ -32,6 +35,7 @@ log = logging.getLogger("worker")
 
 DEADLINE = time.time() + int(os.getenv("WORKER_SECONDS", "20400"))
 trader = None
+_last_vrank = 0.0
 
 
 # ------------------------------------------------------------------ publish
@@ -75,6 +79,48 @@ async def _publish():
             for a, e in engine.cache.items() if e["candles"]]
     if rows:
         await sigstore.feed_upsert(rows)
+    # análise de ticks (barato — corre sempre)
+    tick_out = {}
+    for a in SCAN_ASSETS:
+        sym = deriv_symbol(a)
+        ticks = list(engine.feed.ticks.get(sym, []))
+        if ticks:
+            tick_out[a] = tickmind.analyze(ticks)
+    if tick_out:
+        await sigstore.state_put("tickmind", tick_out)
+    # streaks + ranking de variantes (pesado — a cada ~15 min)
+    global _last_vrank
+    if time.time() - _last_vrank > 900:
+        _last_vrank = time.time()
+        try:
+            hist = await sigstore.list_history(limit=2000)
+            await sigstore.state_put("streaks", streaks.report(hist))
+        except Exception:
+            log.exception("streaks")
+        try:
+            scored = []
+            done = 0
+            for a in SCAN_ASSETS:
+                if done >= 3:
+                    break
+                cds = (engine.cache.get(a) or {}).get("candles") or []
+                if len(cds) < 60:
+                    continue
+                done += 1
+                for v in vmod.VARIANTS:
+                    n, w, wr = vmod.rank(v, cds, horizon=1, max_eval=60)
+                    if n >= 8:
+                        scored.append({"id": v["id"], "family": v["family"],
+                                       "asset": a, "n": n, "wr": round(wr, 3)})
+            scored.sort(key=lambda x: -x["wr"])
+            await sigstore.state_put("variants", {
+                "total": len(vmod.VARIANTS),
+                "families": len({v["family"] for v in vmod.VARIANTS}),
+                "evaluated": len(scored),
+                "top": scored[:40],
+                "ts": time.time()})
+        except Exception:
+            log.exception("variants")
 
 
 # ------------------------------------------------------------------ cmds

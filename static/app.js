@@ -32,6 +32,7 @@ const PAGES = {
   strats: ["Biblioteca de Estratégias", "Todas as estratégias do motor — com acerto medido ao vivo"],
   hist:   ["Histórico de Sinais", "Sinais avaliados — live e importados do PINHANHA 1"],
   anal:   ["Análise de Mercado", "Gráfico, indicadores, padrões e dígitos por ativo"],
+  lab:    ["Laboratório", "1222 variantes, análise de ticks e sequências"],
   exec:   ["Execução Automática", "Conta Deriv, limites de risco e operações reais"],
   cfg:    ["Definições", "Ligação Deriv e varredura"],
 };
@@ -42,6 +43,7 @@ function go(p) {
   if (p === "strats") renderStrats();
   if (p === "hist") loadHistory();
   if (p === "anal") loadAnalysis();
+  if (p === "lab") loadLab();
   if (p === "exec") loadExec();
   if (p === "cfg") loadCfg();
 }
@@ -664,3 +666,54 @@ async function saveLimits() {
 async function refresh() { await loadStatus(); await loadSignals(); await loadStats(); }
 boot().catch(() => {});
 if (!TOKEN) showLogin(); else { boot(); }
+
+// ---------- LABORATÓRIO ----------
+let _labT = null;
+async function loadLab() {
+  try {
+    const [v, s, t] = await Promise.all([
+      api("/api/variants"), api("/api/streaks"), api("/api/tickmind")]);
+    $("labKpis").innerHTML = `
+      <div class="card"><label>VARIANTES</label><div class="pc-big">${v.total ?? "—"}</div>
+        <span class="disc">${v.families ?? "—"} famílias · ${v.evaluated ?? 0} avaliadas</span></div>
+      <div class="card"><label>WR MEDIDO</label><div class="pc-big">${s.wr != null ? (s.wr*100).toFixed(1)+"%" : "—"}</div>
+        <span class="disc">${s.n ?? 0} sinais avaliados</span></div>
+      <div class="card"><label>MAIOR SEQUÊNCIA</label><div class="pc-big">${s.max_win_streak ?? "—"}</div>
+        <span class="disc">wins seguidas · P(20): ${(s.p20_given_wr ?? 0).toExponential(1)}</span></div>`;
+    $("labVarInfo").textContent = v.ts
+      ? `actualizado ${new Date(v.ts*1000).toLocaleTimeString()} — rankeado nas velas reais Deriv`
+      : "a calcular… (ranking corre a cada ~15min no worker)";
+    $("labVarBody").innerHTML = (v.top || []).map(x =>
+      `<tr><td style="font-family:monospace;font-size:11px">${x.id}</td><td>${x.family}</td>
+       <td>${x.asset}</td><td>${x.n}</td>
+       <td style="color:${x.wr>=0.55?"var(--g)":x.wr<0.48?"var(--r)":"inherit"}">${(x.wr*100).toFixed(1)}%</td></tr>`).join("")
+      || '<tr><td colspan="5" class="sk">a calcular…</td></tr>';
+    const cls = Object.entries(s.per_class || {}).map(([k,x]) =>
+      `<div>${k}: ${(x.wr*100).toFixed(1)}% (${x.n}) · max seq ${x.max_win_streak}</div>`).join("");
+    $("labStreaks").innerHTML = s.n ? `
+      <div>Vitórias seguidas máx.: <b>${s.max_win_streak}</b> · Derrotas: <b>${s.max_loss_streak}</b></div>
+      <div>Sequência actual: ${s.current?.dir} ×${s.current?.n}</div>
+      <div>WR: ${(s.wr*100).toFixed(1)}% [${(s.wr_ci95?.[0]*100).toFixed(0)}–${(s.wr_ci95?.[1]*100).toFixed(0)}%]</div>
+      <div>P(20 wins): ${(s.p20_given_wr ?? 0).toExponential(2)}</div>
+      <div style="margin-top:8px;color:var(--mut)">${cls}</div>
+      <div class="disc" style="margin-top:8px">${s.note || ""}</div>`
+      : "sem resultados avaliados ainda";
+    const assets = Object.keys(t || {});
+    if (assets.length && !$("labTickAsset").options.length)
+      $("labTickAsset").innerHTML = assets.map(a => `<option>${a}</option>`).join("");
+    _labT = t;
+    renderLabTicks();
+  } catch (e) {}
+}
+function renderLabTicks() {
+  const a = $("labTickAsset").value;
+  const d = (_labT || {})[a];
+  if (!d) { $("labTicks").textContent = "sem dados de ticks"; return; }
+  const w = d.windows || {};
+  $("labTicks").textContent =
+    `${a} · ${d.n_ticks} ticks · último ${w["5"]?.last_px ?? "—"}\n` +
+    Object.entries(w).map(([k, x]) =>
+      `${k.padStart(4)}t ↑${x.up} ↓${x.down} p_up ${x.p_up}±${x.se} streak ${x.max_streak} acel ${x.accel}`).join("\n") +
+    `\nregime: ${d.regime?.detected ? "MUDANÇA" : "estável"} (vol×${d.regime?.vol_ratio ?? "?"})` +
+    `\nfalso rompimento: ↑${d.false_break?.up?"sim":"não"} ↓${d.false_break?.down?"sim":"não"}`;
+}
