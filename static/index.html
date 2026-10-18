@@ -125,6 +125,43 @@ input:focus,select:focus{outline:none;border-color:var(--cy)}
 .dlast i{font-style:normal;width:26px;height:26px;border-radius:7px;background:var(--card2);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:12px}
 .sk{opacity:.5}
 @media(max-width:640px){.g4{grid-template-columns:1fr 1fr}.hero{flex-direction:column;align-items:flex-start}.dgrid{grid-template-columns:repeat(5,1fr)}}
+/* ---------- Execução (layout Placa Curiosa) ---------- */
+.pc{display:grid;grid-template-columns:minmax(380px,46%) 1fr;gap:16px;margin-bottom:16px}
+@media(max-width:980px){.pc{grid-template-columns:1fr}}
+.pc-brand{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.pc-logo{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:22px;font-weight:900;color:#04222c;
+  background:linear-gradient(135deg,var(--cy),var(--cy2));box-shadow:0 0 22px rgba(34,211,238,.45)}
+.pc-brand b{font-size:17px;letter-spacing:.8px}
+.pc-brand span{display:block;font-size:9.5px;letter-spacing:2.4px;color:var(--mut)}
+.pc-bal{display:flex;gap:0;border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:14px}
+.pc-bal>div{flex:1;padding:16px 18px}
+.pc-bal-l{background:var(--card2)}
+.pc-bal-r{background:var(--card)}
+.pc-bal label{font-size:10.5px;color:var(--mut);letter-spacing:1.2px;text-transform:uppercase;margin:0}
+.pc-big{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:6px}
+#pcPl{color:var(--g)}#pcPl.neg{color:var(--r)}
+.pc-tx{font-size:11px;color:var(--mut);margin-top:6px;text-align:right}
+.pc-tx b{color:var(--g)}
+.pc-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.pc-dighead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+.pc-digs{display:grid;grid-template-columns:repeat(10,1fr);gap:4px;font-size:10px;color:var(--mut);text-align:center;margin-bottom:4px}
+.pc-symrow{display:flex;justify-content:space-between;font-size:11.5px;color:var(--mut);margin-top:6px}
+.pc-symrow b{color:var(--cy);font-variant-numeric:tabular-nums}
+.pc-topbar{display:flex;align-items:center;gap:7px;margin-bottom:14px}
+.pc-phases{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.pc-phases .ph{font-size:10.5px;letter-spacing:1.4px;color:var(--mut);font-weight:700;position:relative;padding-left:14px}
+.pc-phases .ph::before{content:"";position:absolute;left:0;top:2px;width:8px;height:8px;border-radius:50%;background:var(--line)}
+.pc-phases .ph.on{color:var(--cy)}
+.pc-phases .ph.on::before{background:var(--g);box-shadow:0 0 10px var(--g)}
+.pc-phases .ln{flex:1;height:2px;background:var(--line);border-radius:2px}
+.pc-tabs{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.pct{background:var(--card2);border:1px solid var(--line);color:var(--mut);padding:7px 18px;border-radius:9px 9px 0 0;
+  font-size:11px;letter-spacing:1px;font-weight:700;cursor:pointer}
+.pct.on{color:var(--txt);border-bottom-color:var(--card);background:var(--card)}
+#pcTrBody td{font-size:12px}
+#pcTrBody .res-w{color:var(--g);font-weight:700}
+#pcTrBody .res-l{color:var(--r);font-weight:700}
 </style>
 </head>
 <body>
@@ -281,53 +318,107 @@ input:focus,select:focus{outline:none;border-color:var(--cy)}
   </section>
 
   <!-- ================= DEFINIÇÕES ================= -->
-  <!-- ================= EXECUÇÃO ================= -->
+  <!-- ================= EXECUÇÃO (layout Placa Curiosa) ================= -->
   <section class="page" id="p-exec">
-    <div class="grid g2">
-      <div class="card">
-        <h3 class="sec">Conta Deriv</h3>
-        <div id="accState" style="margin-bottom:10px"></div>
-        <div id="accForm">
-          <label>API token oficial — app.deriv.com → Settings → API token (scope: <b>Trade</b>)</label>
-          <input id="dToken" type="password" placeholder="cola aqui o token (nunca a password)">
-          <div style="margin-top:10px;display:flex;gap:8px">
-            <button class="b cy" onclick="connectDeriv()">⇄ Ligar conta Deriv</button>
-          </div>
-          <p class="disc">O token fica apenas no backend — nunca no browser nem em logs. Escolhe só o scope Trade.</p>
+    <div class="pc">
+      <!-- ============ COLUNA ESQUERDA ============ -->
+      <div class="pc-l">
+        <div class="pc-brand">
+          <div class="pc-logo">P</div>
+          <div><b>PINHANHA 2.0</b><span>OPERAÇÕES AUTOMATIZADAS</span></div>
         </div>
-        <div id="accList" style="margin-top:10px"></div>
-        <div id="accPick" style="margin-top:10px;display:none">
-          <label id="realCk" style="display:none"><input type="checkbox" id="ckReal"> Confirmo negociar com dinheiro REAL</label>
-          <div style="margin-top:8px;display:flex;gap:8px">
-            <button class="b ghost" onclick="disconnectDeriv()">Revogar / desligar</button>
-          </div>
+        <div class="pc-bal">
+          <div class="pc-bal-l"><label>SALDO</label><div class="pc-big" id="pcBal">$ — USD</div></div>
+          <div class="pc-bal-r"><label>LUCRO/PERDA</label><div class="pc-big" id="pcPl">$ 0.00</div>
+            <div class="pc-tx">Transações <b id="pcTxO">0</b> / <b id="pcTxT">0</b></div></div>
+        </div>
+        <div class="pc-row">
+          <div><label>TIPO DE CONTA</label>
+            <select id="pcAcc" onchange="pcSwitchAcc(this.value)">
+              <option value="">— ligar conta —</option>
+            </select></div>
+          <div><label>ESTRATÉGIA</label>
+            <select id="pcStrat" onchange="pcSetStrat(this.value)">
+              <option value="">Selecionar Robô (consenso 15)</option>
+            </select></div>
+        </div>
+        <div class="card" style="margin-bottom:0">
+          <div class="pc-dighead"><b>Últimos Dígitos: <span id="pcLastDig">—</span></b>
+            <select id="pcDigAsset" onchange="loadDigits()" style="width:auto;padding:4px 8px;font-size:11px"></select>
+            <span class="disc" id="pcDigN">—</span></div>
+          <div class="pc-digs" id="pcDigPct"></div>
+          <canvas id="pcDigBars" height="130"></canvas>
+          <canvas id="pcChart" height="90"></canvas>
+          <div class="pc-symrow"><span id="pcSymName">—</span><b id="pcSymPrice">—</b></div>
         </div>
       </div>
-      <div class="card">
-        <h3 class="sec">Execução Automática</h3>
-        <div id="exState" style="font-size:12px;color:var(--mut);margin-bottom:10px"></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="b go" id="btnAuto" onclick="autoCtl(true)">▶ Ativar execução automática</button>
-          <button class="b pause" onclick="autoCtl(false)">⏸ Pausar</button>
-          <button class="b stop" onclick="emergency()">🛑 Paragem de emergência</button>
+      <!-- ============ COLUNA DIREITA ============ -->
+      <div class="pc-r">
+        <div class="pc-topbar">
+          <span id="pcZoom" class="disc mono">100%</span>
+          <button class="b ghost" style="padding:5px 9px" onclick="pcZoom(-1)">−</button>
+          <button class="b ghost" style="padding:5px 9px" onclick="pcZoom(1)">+</button>
+          <button class="b ghost" style="padding:5px 9px" onclick="pcZoom(0)">Reset</button>
+          <span style="flex:1"></span>
+          <button class="b ghost" style="padding:5px 10px" title="Limites de risco" onclick="document.getElementById('pcLim').scrollIntoView({behavior:'smooth'})">⚙</button>
+          <button class="b go" id="pcPlay" style="padding:6px 12px" title="Ativar/pausar" onclick="pcToggle()">▶</button>
+          <button class="b stop" id="pcStop" style="padding:6px 12px" title="Paragem de emergência" onclick="emergency()">■</button>
         </div>
-        <div id="exErr" style="margin-top:8px;font-size:11px;color:var(--r)"></div>
-        <div class="grid g4" style="margin-top:12px">
-          <div class="kpi"><span>Abertas</span><b id="kOpen">0</b></div>
-          <div class="kpi"><span>P/L realizado</span><b id="kReal">0.00</b></div>
-          <div class="kpi"><span>P/L flutuante</span><b id="kUnreal">0.00</b></div>
-          <div class="kpi"><span>Perdas seguidas</span><b id="kConsec">0</b></div>
+        <div class="pc-phases">
+          <span class="ph" id="ph1">ANALYZING</span><i class="ln"></i>
+          <span class="ph" id="ph2">OPEN CONTRACT</span><i class="ln"></i>
+          <span class="ph" id="ph3">CLOSED CONTRACT</span>
         </div>
-        <div id="lastOrder" style="margin-top:8px;font-size:11px;color:var(--mut)"></div>
+        <div class="pc-tabs">
+          <button class="pct on" id="tabTrader" onclick="pcTab('trader')">TRADER</button>
+          <button class="pct" id="tabNotif" onclick="pcTab('notif')">NOTIFICAÇÕES (<span id="notifN">0</span>)</button>
+          <span style="flex:1"></span>
+          <button class="b ghost" style="padding:5px 9px" title="limpar notificações" onclick="$('notifList').innerHTML='';$('notifN').textContent='0'">🗑</button>
+        </div>
+        <div class="card" style="margin-bottom:0">
+          <div id="paneTrader">
+            <table><thead><tr><th>TIPO</th><th>ÚLTIMO PONTO</th><th>PREÇO</th><th>RESULTADO</th></tr></thead>
+            <tbody id="pcTrBody"></tbody></table>
+            <div class="disc" id="pcNoTr" style="text-align:center;padding:22px 0">Nenhuma transação ainda</div>
+          </div>
+          <div id="paneNotif" style="display:none"><div id="notifList" style="font-size:12px;color:var(--mut)"></div></div>
+        </div>
+        <div id="exState" style="font-size:11.5px;color:var(--mut);margin-top:10px"></div>
+        <div id="exErr" style="margin-top:6px;font-size:11px;color:var(--r)"></div>
       </div>
     </div>
-    <div class="card">
+
+    <!-- ligar conta (visível só sem autorização) -->
+    <div class="card" id="accCard">
+      <h3 class="sec">Ligar conta Deriv</h3>
+      <div id="accState" style="margin-bottom:10px"></div>
+      <div id="accForm">
+        <label>API token oficial — app.deriv.com → Settings → API token (scope: <b>Trade</b>)<br>ou PAT do developers.deriv.com (pat_…) com o App ID configurado</label>
+        <input id="dToken" type="password" placeholder="cola aqui o token (nunca a password)">
+        <div style="margin-top:10px;display:flex;gap:8px">
+          <button class="b cy" onclick="connectDeriv()">⇄ Ligar conta Deriv</button>
+        </div>
+        <p class="disc">O token fica apenas no backend — nunca no browser nem em logs. Scope Trade apenas.</p>
+      </div>
+      <div id="accPick" style="margin-top:10px;display:none">
+        <label id="realCk" style="display:none"><input type="checkbox" id="ckReal"> Confirmo negociar com dinheiro REAL</label>
+        <div style="margin-top:8px;display:flex;gap:8px">
+          <button class="b ghost" onclick="disconnectDeriv()">Revogar / desligar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- limites de risco -->
+    <div class="card" id="pcLim">
       <h3 class="sec">Limites de Risco <span style="font-size:10px;color:var(--mut)">(verificados antes de cada compra · sem martingale)</span></h3>
       <div class="grid g4" id="limGrid"></div>
       <div style="margin-top:10px"><button class="b cy" onclick="saveLimits()">Guardar limites</button> <span id="limMsg" style="font-size:11px;color:var(--g)"></span></div>
+      <div id="lastOrder" style="margin-top:8px;font-size:11px;color:var(--mut)"></div>
     </div>
+
+    <!-- pipeline interno (auditoria — estados por sinal) -->
     <div class="card">
-      <h3 class="sec">Operações</h3>
+      <h3 class="sec">Pipeline interno <span style="font-size:10px;color:var(--mut)">(estados candidato→settled — auditoria)</span></h3>
       <table><thead><tr><th>Hora</th><th>Símbolo</th><th>Tipo</th><th>Stake</th><th>Estado</th><th>Contrato</th><th>P/L</th><th>Erro</th></tr></thead>
       <tbody id="trBody"></tbody></table>
     </div>

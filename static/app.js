@@ -344,63 +344,229 @@ const LIM_FIELDS = [
   ["min_payout", "Payout mín."], ["min_conf", "Conf. mín. p/ executar"],
   ["duration_s", "Duração (s)"], ["pause_after_errors", "Pausa após falhas"],
 ];
-let _execT = null;
+const VOTERS = ["ai_turbo","multi_indicator","rsi_momentum","macd_momentum",
+  "momentum","bible_sr","price_action","breakout","bible_engulfing",
+  "bible_pinbar","q_reversao","q_pullback","q_breakout_retest",
+  "q_range_fade","q_mtf"];
+let _execT = null, _zoom = 100, _st = null, _digAssets = [];
 
 async function loadExec() {
   try {
     const st = await api("/api/autotrade/status");
-    renderExec(st);
+    _st = st; renderExec(st);
+    refreshRealOps();
     const tr = await api("/api/trades?limit=60");
     renderTrades(tr.trades || []);
+    if (!_digAssets.length) {
+      const as = await api("/api/assets");
+      _digAssets = (as || []).filter(a => a.cls === "synthetic");
+      $("pcDigAsset").innerHTML = _digAssets.map(a =>
+        `<option value="${a.asset}">${a.label}</option>`).join("");
+      $("pcStrat").innerHTML =
+        '<option value="">Selecionar Robô (consenso 15)</option>' +
+        VOTERS.map(v => `<option value="${v}">${v}</option>`).join("");
+      const sf = st.limits?.strategy_filter;
+      if (sf) $("pcStrat").value = sf;
+      loadDigits();
+    }
     if (!_execT) _execT = setInterval(async () => {
       if (!document.getElementById("p-exec").classList.contains("on")) return;
-      try { renderExec(await api("/api/autotrade/status"));
-            renderTrades((await api("/api/trades?limit=60")).trades || []); } catch (e) {}
+      try { _st = await api("/api/autotrade/status"); renderExec(_st);
+            refreshRealOps();
+            renderTrades((await api("/api/trades?limit=60")).trades || []);
+            loadDigits(); } catch (e) {}
     }, 5000);
   } catch (e) { $("exErr").textContent = String(e); }
 }
 
+// ---------- dados 100% reais da conta Deriv ----------
+async function refreshRealOps() {
+  try {
+    const [pf, pt] = await Promise.all([
+      api("/api/deriv/portfolio"), api("/api/deriv/profit-table?limit=40")]);
+    renderDerivOps(pf.contracts || [], pt.transactions || []);
+  } catch (e) {}
+}
+
+function shortToType(sc) {
+  // "CALL_R_100_1.89_…_S0P_0" → "CALL · R_100"
+  const p = (sc || "").split("_");
+  return p.length >= 2 ? `${p[0]} · ${p[1]}` : (sc || "—");
+}
+
+function renderDerivOps(contracts, txs) {
+  const rows = [];
+  for (const c of contracts)
+    rows.push({type: shortToType(c.shortcode) || c.contract_type,
+               ts: c.purchase_time, price: c.buy_price,
+               res: c.profit != null ? +c.profit : null, open: true});
+  for (const t of txs)
+    rows.push({type: shortToType(t.shortcode), ts: t.sell_time || t.purchase_time,
+               price: t.buy_price,
+               res: t.sell_price != null ? +(t.sell_price - t.buy_price).toFixed(2) : null,
+               open: false});
+  rows.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+  $("pcNoTr").style.display = rows.length ? "none" : "block";
+  $("pcTxO").textContent = contracts.length;
+  $("pcTxT").textContent = contracts.length + txs.length;
+  const pl = txs.reduce((s, t) => s + ((t.sell_price ?? 0) - (t.buy_price ?? 0)), 0)
+           + contracts.reduce((s, c) => s + (+(c.profit || 0)), 0);
+  $("pcPl").textContent = "$ " + pl.toFixed(2);
+  $("pcPl").classList.toggle("neg", pl < 0);
+  // fases
+  $("ph1").classList.toggle("on", true);
+  $("ph2").classList.toggle("on", contracts.length > 0);
+  $("ph3").classList.toggle("on", !contracts.length && txs.length > 0);
+  $("pcTrBody").innerHTML = rows.map(r => `<tr>
+    <td>${r.type}</td>
+    <td>${r.ts ? new Date(r.ts * 1000).toLocaleTimeString("pt-PT") : "—"}${r.open ? ' <span class="pill cy" style="padding:1px 7px;font-size:9px">aberto</span>' : ""}</td>
+    <td class="mono">${r.price != null ? (+r.price).toFixed(2) : "—"}</td>
+    <td class="${r.res == null ? "" : r.res >= 0 ? "res-w" : "res-l"}">${r.res != null ? (r.res > 0 ? "+" : "") + r.res.toFixed(2) : (r.open ? "…" : "—")}</td>
+  </tr>`).join("");
+}
+
+// ---------- dígitos + gráfico ----------
+async function loadDigits() {
+  const a = $("pcDigAsset").value;
+  if (!a) return;
+  try {
+    const d = await api(`/api/digits/${a}?n=200`);
+    if (!d.available) { $("pcDigPct").innerHTML = `<span class="disc">${d.reason || "sem dados"}</span>`; return; }
+    const tot = Object.values(d.counts).reduce((s, x) => s + x, 0) || 1;
+    const maxD = Object.keys(d.counts).reduce((m, k) => d.counts[k] > d.counts[m] ? k : m, "0");
+    $("pcDigPct").innerHTML = [...Array(10)].map((_, i) =>
+      `<div>${(100 * d.counts[String(i)] / tot).toFixed(1)}%</div>`).join("");
+    $("pcDigN").textContent = `${d.n} ${d.source === "candles" ? "candles" : "ticks"}`;
+    $("pcLastDig").textContent = d.last?.[0] ?? "—";
+    $("pcSymPrice").textContent = d.last_price != null ? (+d.last_price).toFixed(2) : "—";
+    $("pcSymName").textContent = _digAssets.find(x => x.asset === a)?.label || a;
+    drawDigBars(d.counts, maxD);
+    drawPcChart(a, d);
+  } catch (e) {}
+}
+
+function drawDigBars(counts, maxD) {
+  const cv = $("pcDigBars"), ctx = cv.getContext("2d");
+  const W = cv.width = cv.offsetWidth || 420, H = cv.height = 130;
+  ctx.clearRect(0, 0, W, H);
+  const tot = Object.values(counts).reduce((s, x) => s + x, 0) || 1;
+  const bw = W / 10;
+  for (let i = 0; i < 10; i++) {
+    const v = counts[String(i)] / tot, h = Math.max(6, v * (H - 26));
+    const hot = String(i) === maxD;
+    ctx.fillStyle = hot ? "#22e58c" : "#3d4a66";
+    const x = i * bw + bw * 0.16;
+    roundRect(ctx, x, H - 18 - h, bw * 0.68, h, 4); ctx.fill();
+    ctx.fillStyle = "#7d8ab0"; ctx.font = "11px system-ui"; ctx.textAlign = "center";
+    ctx.fillText(String(i), i * bw + bw / 2, H - 4);
+  }
+}
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath(); ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+
+async function drawPcChart(asset, d) {
+  try {
+    const cd = await api(`/api/candles/${asset}?period=60&n=60`);
+    const candles = cd.candles || [];
+    const cv = $("pcChart"), ctx = cv.getContext("2d");
+    const W = cv.width = cv.offsetWidth || 420, H = cv.height = 90;
+    ctx.clearRect(0, 0, W, H);
+    if (!candles.length) return;
+    const closes = candles.map(c => c.close), mn = Math.min(...closes), mx = Math.max(...closes);
+    const X = i => 8 + i * (W - 16) / (closes.length - 1);
+    const Y = v => 8 + (mx - v) / ((mx - mn) || 1) * (H - 30);
+    ctx.strokeStyle = "#e8eefc"; ctx.lineWidth = 1.4; ctx.beginPath();
+    closes.forEach((c, i) => i ? ctx.lineTo(X(i), Y(c)) : ctx.moveTo(X(i), Y(c)));
+    ctx.stroke();
+    // marcadores de dígitos por baixo (como no painel de referência)
+    const pip = 2, ds = closes.map(c => Math.round(c * 10 ** pip) % 10);
+    const step = Math.max(1, Math.floor(closes.length / 25));
+    ctx.font = "9px system-ui"; ctx.textAlign = "center";
+    for (let i = 0; i < closes.length; i += step) {
+      ctx.fillStyle = "#0e1526"; ctx.beginPath();
+      ctx.arc(X(i), H - 10, 8, 0, 7); ctx.fill();
+      ctx.strokeStyle = "#1c2740"; ctx.stroke();
+      ctx.fillStyle = "#e8eefc"; ctx.fillText(String(ds[i]), X(i), H - 7);
+    }
+    ctx.fillStyle = "#22d3ee"; ctx.beginPath();
+    ctx.arc(X(closes.length - 1), Y(closes[closes.length - 1]), 3.5, 0, 7); ctx.fill();
+  } catch (e) {}
+}
+
+// ---------- controlos ----------
+function pcZoom(d) {
+  _zoom = d === 0 ? 100 : Math.min(150, Math.max(60, _zoom + d * 10));
+  $("pcZoom").textContent = _zoom + "%";
+  document.getElementById("p-exec").style.zoom = _zoom / 100;
+}
+function pcTab(w) {
+  $("tabTrader").classList.toggle("on", w === "trader");
+  $("tabNotif").classList.toggle("on", w === "notif");
+  $("paneTrader").style.display = w === "trader" ? "block" : "none";
+  $("paneNotif").style.display = w === "notif" ? "block" : "none";
+}
+function pcToggle() { autoCtl(!(_st && _st.enabled)); }
+async function pcSwitchAcc(loginid) {
+  if (!loginid) return;
+  const x = (_st?.accounts || []).find(a => a.loginid === loginid);
+  if (!x) return;
+  await pickAcc(loginid, !x.is_virtual);
+  refreshRealOps();
+}
+async function pcSetStrat(v) {
+  try {
+    const st = await api("/api/autotrade/limits",
+                         {limits: {strategy_filter: v || null}});
+    _st = st;
+  } catch (e) { $("exErr").textContent = String(e); }
+}
+function notif(msg, bad) {
+  const d = document.createElement("div");
+  d.style.cssText = `padding:6px 0;border-bottom:1px solid var(--line);color:${bad ? "var(--r)" : "var(--mut)"}`;
+  d.textContent = `${new Date().toLocaleTimeString("pt-PT")} — ${msg}`;
+  $("notifList").prepend(d);
+  $("notifN").textContent = $("notifList").childElementCount;
+}
+
 function renderExec(st) {
   const a = st.account;
+  // cartão de ligação
+  $("accCard").style.display = st.authorized ? "none" : "block";
   $("accState").innerHTML = st.authorized
-    ? `<span class="pill on">${a?.is_virtual ? "DEMO" : "REAL"}</span> ` +
-      `<b>${a?.loginid || "?"}</b> · ${a?.currency || ""} · saldo <b>${a?.balance ?? "?"}</b>` +
-      `<div style="font-size:11px;color:var(--mut);margin-top:4px">host ${st.host || "—"} · scopes: ${(a?.scopes || []).join(", ") || "—"}</div>`
+    ? `<span class="pill on">${a?.is_virtual ? "DEMO" : "REAL"}</span> <b>${a?.loginid || "?"}</b> · ${a?.currency || ""}`
     : `<span class="pill off">não ligado</span>`;
   $("accForm").style.display = st.authorized ? "none" : "block";
-  const has = (st.accounts || []).length > 0;
-  $("accPick").style.display = has ? "block" : "none";
-  $("accList").innerHTML = (st.accounts || []).map(x => {
-    const sel = a && a.loginid === x.loginid;
-    const needCk = !x.is_virtual;
-    return `<div style="display:flex;align-items:center;gap:8px;margin:6px 0;padding:8px;border:1px solid var(--bdr);border-radius:8px">
-      <span class="pill ${x.is_virtual ? "cy" : "on"}">${x.is_virtual ? "DEMO" : "REAL"}</span>
-      <b class="mono">${x.loginid}</b> <span style="color:var(--mut)">${x.currency} · ${x.balance ?? "?"}</span>
-      ${sel ? '<span style="color:var(--g);font-size:11px">● activa</span>'
-             : `<button class="b ghost" style="padding:4px 10px" onclick="pickAcc('${x.loginid}',${needCk})">usar</button>`}
-    </div>`;
-  }).join("");
+  $("accPick").style.display = (st.accounts || []).length ? "block" : "none";
   const hasReal = (st.accounts || []).some(x => !x.is_virtual);
   $("realCk").style.display = hasReal ? "block" : "none";
+  // SALDO + tipo de conta
+  $("pcBal").textContent = st.authorized && a
+    ? `$ ${(+ (a.balance ?? 0)).toFixed(2)} ${a.currency || "USD"}` : "$ — USD";
+  const cur = a?.loginid || "";
+  $("pcAcc").innerHTML = (st.accounts || []).map(x =>
+    `<option value="${x.loginid}" ${x.loginid === cur ? "selected" : ""}>${x.is_virtual ? "Conta Virtual" : "Conta Real"} — ${x.loginid} (${x.currency} ${x.balance ?? "?"})</option>`).join("")
+    || '<option value="">— ligar conta —</option>';
+  // estado
   const ex = [];
-  ex.push(st.enabled ? '<span class="pill on">ATIVA</span>'
-                     : '<span class="pill off">OFF</span>');
+  ex.push(st.enabled ? '<span class="pill on">EXECUÇÃO ATIVA</span>'
+                     : '<span class="pill off">EXECUÇÃO OFF</span>');
   if (st.emergency) ex.push('<span class="pill" style="background:var(--r);color:#000">EMERGÊNCIA</span>');
   if (st.mode) ex.push(`<span class="pill cy">${st.mode.toUpperCase()}</span>`);
+  if (st.host) ex.push(`<span class="disc" style="margin:0">${st.host}</span>`);
   $("exState").innerHTML = ex.join(" ");
   $("exErr").textContent = st.last_error || "";
-  $("kOpen").textContent = st.open;
-  $("kReal").textContent = (st.realized_pl || 0).toFixed(2);
-  $("kUnreal").textContent = (st.unrealized_pl || 0).toFixed(2);
-  $("kConsec").textContent = st.consec_losses || 0;
-  $("btnAuto").textContent = st.enabled ? "✓ Execução activa" : "▶ Ativar execução automática";
+  $("pcPlay").textContent = st.enabled ? "⏸" : "▶";
   const lo = st.last_order;
   $("lastOrder").textContent = lo
-    ? `última ordem: ${lo.symbol} ${lo.type} stake ${lo.stake} contrato ${lo.contract_id || "—"}`
+    ? `última ordem: ${lo.symbol} ${lo.type} stake ${lo.stake} contrato ${lo.contract_id || "—"} · estado ${lo.state || ""}`
     : "";
   $("limGrid").innerHTML = LIM_FIELDS.map(([k, lbl]) =>
     `<div><label style="font-size:11px">${lbl}</label>
      <input id="lim_${k}" type="number" step="any" value="${st.limits?.[k] ?? ""}"></div>`).join("");
+  if (st.last_error) notif(st.last_error, true);
 }
 
 function renderTrades(trades) {
@@ -425,19 +591,20 @@ async function connectDeriv() {
   try {
     const st = await api("/api/deriv/connect", {token: tok});
     $("dToken").value = "";
-    renderExec(st);
+    renderExec(st); refreshRealOps();
   } catch (e) { $("exErr").textContent = String(e); }
 }
 
 async function pickAcc(loginid, needReal) {
   if (needReal && !$("ckReal").checked) {
+    $("accCard").style.display = "block";
     $("exErr").textContent = "conta REAL — marca a confirmação primeiro";
     return;
   }
   try {
     const st = await api("/api/deriv/select",
                          {loginid, confirm_real: needReal});
-    renderExec(st);
+    _st = st; renderExec(st);
   } catch (e) { $("exErr").textContent = String(e); }
 }
 
@@ -450,14 +617,16 @@ async function autoCtl(on) {
   $("exErr").textContent = "";
   try {
     const st = await api("/api/autotrade/enable", {on});
-    renderExec(st);
-  } catch (e) { $("exErr").textContent = String(e); }
+    _st = st; renderExec(st);
+    notif(on ? "execução automática ativada" : "execução pausada");
+  } catch (e) { $("exErr").textContent = String(e); notif(String(e), true); }
 }
 
 async function emergency() {
   try {
     const st = await api("/api/autotrade/emergency", {on: true});
-    renderExec(st);
+    _st = st; renderExec(st);
+    notif("PARAGEM DE EMERGÊNCIA — novas entradas bloqueadas", true);
   } catch (e) { $("exErr").textContent = String(e); }
 }
 
@@ -469,7 +638,7 @@ async function saveLimits() {
   });
   try {
     const st = await api("/api/autotrade/limits", {limits: patch});
-    renderExec(st);
+    _st = st; renderExec(st);
     $("limMsg").textContent = "guardado ✓";
     setTimeout(() => $("limMsg").textContent = "", 2500);
   } catch (e) { $("exErr").textContent = String(e); }

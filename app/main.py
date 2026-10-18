@@ -174,10 +174,21 @@ async def digits_ep(asset: str, n: int = 200, _=Depends(auth)):
     Só disponível em símbolos com stream de ticks ao vivo."""
     sym = deriv_symbol(asset)
     ticks = list(engine.feed.ticks.get(sym, []))[-n:]
-    if not ticks:
-        return {"asset": asset, "available": False,
-                "reason": "sem stream de ticks (modo poll ou sem dados)"}
     pip = engine.feed.pip_size.get(sym, 2)
+    if not ticks:
+        # modo poll: derivar dígitos dos fechos dos candles reais
+        candles = engine.feed.candles.get(sym) or []
+        if not candles:
+            return {"asset": asset, "available": False,
+                    "reason": "sem dados de ticks nem candles"}
+        digits = [int(round(c.get("close", 0) * 10 ** pip)) % 10
+                  for c in candles[-n:]]
+        counts = {str(d): digits.count(d) for d in range(10)}
+        return {"asset": asset, "available": True, "n": len(digits),
+                "source": "candles", "counts": counts,
+                "last": digits[-20:][::-1],
+                "last_price": candles[-1].get("close"),
+                "ts": candles[-1].get("time")}
     digits = []
     for t in ticks:
         q = t["quote"]
@@ -386,6 +397,32 @@ async def trades_ep(limit: int = 100, _=Depends(auth)):
     merged = rows + [m for m in mem if m["id"] not in seen]
     merged.sort(key=lambda r: r.get("emit_ts") or 0, reverse=True)
     return {"trades": merged[:limit]}
+
+
+@app.get("/api/deriv/portfolio")
+async def deriv_portfolio(_=Depends(auth)):
+    """Contratos REALMENTE abertos na conta Deriv seleccionada."""
+    if not trader.ws or not trader.ws.connected:
+        return {"connected": False, "contracts": []}
+    try:
+        p = await trader.ws.portfolio()
+        return {"connected": True,
+                "contracts": p.get("contracts") or []}
+    except Exception as e:
+        return {"connected": True, "contracts": [], "error": str(e)[:160]}
+
+
+@app.get("/api/deriv/profit-table")
+async def deriv_profit_table(limit: int = 30, _=Depends(auth)):
+    """Operações REALMENTE fechadas na conta Deriv (P/L real)."""
+    if not trader.ws or not trader.ws.connected:
+        return {"connected": False, "transactions": []}
+    try:
+        tx = await trader.ws.profit_table(limit=limit)
+        return {"connected": True, "transactions": tx}
+    except Exception as e:
+        return {"connected": True, "transactions": [],
+                "error": str(e)[:160]}
 
 
 app.mount("/static", StaticFiles(directory=STATIC), name="static")

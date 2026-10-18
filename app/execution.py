@@ -45,6 +45,7 @@ DEFAULT_LIMITS = {
     "duration_s": 60,
     "min_conf": 55,            # confiança calibrada mínima p/ executar
     "pause_after_errors": 3,
+    "strategy_filter": None,   # nome do votante; None = consenso dos 15
 }
 
 STATES = ("candidate", "validated", "proposal", "buy_sent", "confirmed",
@@ -286,6 +287,12 @@ class DerivExecWS:
     async def portfolio(self):
         return (await self._send({"portfolio": 1})).get("portfolio", {})
 
+    async def profit_table(self, limit=50):
+        """Histórico REAL de contratos fechados na conta (profit_table)."""
+        m = await self._send({"profit_table": 1, "limit": limit,
+                              "offset": 0, "sort": "DESC"})
+        return (m.get("profit_table") or {}).get("transactions") or []
+
     async def forget_all(self):
         try:
             await self._send({"forget_all": ["proposal_open_contract"]})
@@ -313,6 +320,9 @@ class RiskManager:
     async def save(self, patch):
         for k, v in patch.items():
             if k in DEFAULT_LIMITS:
+                if k == "strategy_filter":
+                    self.limits[k] = str(v) if v else None
+                    continue
                 try:
                     self.limits[k] = float(v)
                 except (TypeError, ValueError):
@@ -472,6 +482,9 @@ class AutoTrader:
             return
         if self.mode is None or sig.get("watch"):
             return
+        sf = self.risk.limits.get("strategy_filter")
+        if sf and sf not in (sig.get("voters") or []):
+            return   # estratégia seleccionada no painel não votou neste sinal
         sig_id = sig.get("sig_id")
         if not sig_id or sig_id in self._busy or sig_id in self.trades:
             return
