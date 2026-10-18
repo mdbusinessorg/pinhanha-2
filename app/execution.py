@@ -428,8 +428,10 @@ class AutoTrader:
             if ok and loginid:
                 await self.select_account(loginid)
                 # repõe execução activa — foi activada explicitamente antes
+                # (select_account persistiu enabled=False; regravar)
                 if st and st.get("enabled") and not self.emergency:
                     self.enabled = True
+                    await self._persist_state()
             await self.reconcile()
 
     async def select_account(self, loginid):
