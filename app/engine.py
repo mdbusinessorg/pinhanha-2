@@ -358,6 +358,10 @@ class SignalEngine:
                 cds = cached["candles"]
                 if not cds:
                     return None
+                # mercado fechado / feed congelado (ex.: forex ao fim de
+                # semana) — velas com mais de 5 min não geram sinais
+                if time.time() - (cds[-1].get("time") or 0) > 300:
+                    return None
                 closes = [c["close"] for c in cds]
                 votes = {"call": 0, "put": 0}
                 confs = {"call": [], "put": []}
