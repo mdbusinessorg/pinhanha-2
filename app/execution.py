@@ -488,7 +488,11 @@ class AutoTrader:
         """Callback do engine: nova oportunidade emitida."""
         if not self.enabled or self.emergency or not self.ws:
             return
-        if self.mode is None or sig.get("watch"):
+        if self.mode is None:
+            return
+        # consenso mínimo — a grade forte/válido exige histórico calibrado
+        # que os sintéticos nunca teriam (só eles executam → deadlock).
+        if len(sig.get("voters") or []) < 2:
             return
         # Rise/Fall 60s só é oferecido nos índices sintéticos — forex/crypto
         # são rejeitados pela Deriv ("Trading is not offered"). Ignorar já aqui.
