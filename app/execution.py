@@ -427,6 +427,9 @@ class AutoTrader:
             ok, err = await self.connect(token)
             if ok and loginid:
                 await self.select_account(loginid)
+                # repõe execução activa — foi activada explicitamente antes
+                if st and st.get("enabled") and not self.emergency:
+                    self.enabled = True
             await self.reconcile()
 
     async def select_account(self, loginid):
