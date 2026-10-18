@@ -77,16 +77,17 @@ def _mk_boll(period, mult, mode):
         b = ind.bollinger([x["close"] for x in c], period, mult)
         if not b:
             return None
+        lo_, mid, up_ = b
         px = c[-1]["close"]
         if mode == "rev":
-            if px < b["lower"]:
+            if px < lo_:
                 return _r("call", 58)
-            if px > b["upper"]:
+            if px > up_:
                 return _r("put", 58)
         else:
-            if px > b["upper"]:
+            if px > up_:
                 return _r("call", 56)
-            if px < b["lower"]:
+            if px < lo_:
                 return _r("put", 56)
         return None
     return f
@@ -211,7 +212,8 @@ def _mk_adx(period, th, di_mode):
         if not a or a["adx"] < th:
             return None
         if di_mode:
-            return _r("call" if a["pdi"] > a["mdi"] else "put", int(min(80, 45 + a["adx"])))
+            return _r("call" if a["plus_di"] > a["minus_di"] else "put",
+                      int(min(80, 45 + a["adx"])))
         return None
     return f
 
