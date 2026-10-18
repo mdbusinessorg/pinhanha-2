@@ -159,7 +159,9 @@ class SignalEngine:
         while True:
             try:
                 if self.running and not self.paused:
-                    await self.scan(min_conf=50)
+                    # corte de emissão alinhado ao corte de execução —
+                    # sintéticos calibram ~42-53 e ficariam de fora a 50
+                    await self.scan(min_conf=40)
             except Exception as e:
                 log.warning("scan_loop: %s", e)
             await asyncio.sleep(60)
