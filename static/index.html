@@ -320,6 +320,26 @@ input:focus,select:focus{outline:none;border-color:var(--cy)}
   <!-- ================= DEFINIÇÕES ================= -->
   <!-- ================= EXECUÇÃO (layout Placa Curiosa) ================= -->
   <section class="page" id="p-exec">
+    <!-- ligar conta (visível só sem autorização) — primeiro, sempre à vista -->
+    <div class="card" id="accCard">
+      <h3 class="sec">Ligar conta Deriv</h3>
+      <div id="accState" style="margin-bottom:10px"></div>
+      <div id="accForm">
+        <label>API token oficial — app.deriv.com → Settings → API token (scope: <b>Trade</b>)<br>ou PAT do developers.deriv.com (pat_…) com o App ID configurado</label>
+        <input id="dToken" type="password" placeholder="cola aqui o token (nunca a password)">
+        <div style="margin-top:10px;display:flex;gap:8px">
+          <button class="b cy" onclick="connectDeriv()">⇄ Ligar conta Deriv</button>
+        </div>
+        <p class="disc">O token fica apenas no backend — nunca no browser nem em logs. Scope Trade apenas.</p>
+      </div>
+      <div id="accPick" style="margin-top:10px;display:none">
+        <label id="realCk" style="display:none"><input type="checkbox" id="ckReal"> Confirmo negociar com dinheiro REAL</label>
+        <div style="margin-top:8px;display:flex;gap:8px">
+          <button class="b ghost" onclick="disconnectDeriv()">Revogar / desligar</button>
+        </div>
+      </div>
+    </div>
+
     <div class="pc">
       <!-- ============ COLUNA ESQUERDA ============ -->
       <div class="pc-l">
@@ -385,26 +405,6 @@ input:focus,select:focus{outline:none;border-color:var(--cy)}
         </div>
         <div id="exState" style="font-size:11.5px;color:var(--mut);margin-top:10px"></div>
         <div id="exErr" style="margin-top:6px;font-size:11px;color:var(--r)"></div>
-      </div>
-    </div>
-
-    <!-- ligar conta (visível só sem autorização) -->
-    <div class="card" id="accCard">
-      <h3 class="sec">Ligar conta Deriv</h3>
-      <div id="accState" style="margin-bottom:10px"></div>
-      <div id="accForm">
-        <label>API token oficial — app.deriv.com → Settings → API token (scope: <b>Trade</b>)<br>ou PAT do developers.deriv.com (pat_…) com o App ID configurado</label>
-        <input id="dToken" type="password" placeholder="cola aqui o token (nunca a password)">
-        <div style="margin-top:10px;display:flex;gap:8px">
-          <button class="b cy" onclick="connectDeriv()">⇄ Ligar conta Deriv</button>
-        </div>
-        <p class="disc">O token fica apenas no backend — nunca no browser nem em logs. Scope Trade apenas.</p>
-      </div>
-      <div id="accPick" style="margin-top:10px;display:none">
-        <label id="realCk" style="display:none"><input type="checkbox" id="ckReal"> Confirmo negociar com dinheiro REAL</label>
-        <div style="margin-top:8px;display:flex;gap:8px">
-          <button class="b ghost" onclick="disconnectDeriv()">Revogar / desligar</button>
-        </div>
       </div>
     </div>
 
