@@ -490,9 +490,11 @@ class SignalEngine:
             for r in below[:max(0, 6 - len(rows))]:
                 r["watch"] = True
                 rows.append(r)
-        rows = rows[:12]
+        # o auto-trader vê TODOS os elegíveis — o corte a 12 é só para o painel;
+        # sem isto os sintéticos (~50-53%) nunca chegavam à execução
         if self.running and not self.paused:
             self._sig_track(rows)
+        rows = rows[:12]
         return {"signals": rows, "scanned": len(assets),
                 "cached": len(self.cache),
                 "connected": self.feed.connected,
