@@ -46,6 +46,8 @@ DEFAULT_LIMITS = {
     "min_conf": 55,            # confiança calibrada mínima p/ executar
     "pause_after_errors": 3,
     "strategy_filter": None,   # nome do votante; None = consenso dos 15
+    "profit_target": 0.0,      # meta de lucro/dia (moeda); 0 = sem meta
+    "max_per_minute": 5,       # só as primeiras N entradas de cada minuto
 }
 
 STATES = ("candidate", "validated", "proposal", "buy_sent", "confirmed",
@@ -329,6 +331,7 @@ class RiskManager:
                     pass
         self.limits["max_open"] = int(self.limits["max_open"])
         self.limits["max_per_day"] = int(self.limits["max_per_day"])
+        self.limits["max_per_minute"] = int(self.limits["max_per_minute"])
         self.limits["consec_loss_limit"] = int(self.limits["consec_loss_limit"])
         self.limits["pause_after_errors"] = int(
             self.limits["pause_after_errors"])
@@ -345,7 +348,8 @@ class RiskManager:
         lost_amt = sum(-(r.get("profit") or 0) for r in done
                        if (r.get("profit") or 0) < 0)
         exposure = sum(r.get("stake") or 0 for r in done)
-        return len(done), lost_amt, exposure, losses
+        profit = sum(r.get("profit") or 0 for r in done)
+        return len(done), lost_amt, exposure, losses, profit
 
     def check(self, sig, open_count, day_rows):
         """(ok, motivo). Avaliado antes de cada compra."""
@@ -357,7 +361,10 @@ class RiskManager:
             return False, f"conf {sig.get('confidence')} < min {L['min_conf']}"
         if open_count >= L["max_open"]:
             return False, f"max abertas {open_count}/{L['max_open']}"
-        n, lost, expo, _ = self._day_totals(day_rows)
+        n, lost, expo, _, prof = self._day_totals(day_rows)
+        tgt = L.get("profit_target") or 0
+        if tgt > 0 and prof >= tgt:
+            return False, f"META {tgt} atingida (P/L {prof:.2f})"
         if n >= L["max_per_day"]:
             return False, f"max ops/dia {n}/{L['max_per_day']}"
         if lost >= L["daily_loss_limit"]:
@@ -397,6 +404,8 @@ class AutoTrader:
         self.trades = {}               # sig_id -> dict
         self._day_rows_cache = (0, [])
         self._busy = set()             # sig_ids em pipeline
+        self._minute = 0               # minuto corrente (epoch//60)
+        self._min_count = 0            # entradas já aceites neste minuto
         self._rec_task = None
         self.last_error = None
         self.last_order = None
@@ -519,6 +528,16 @@ class AutoTrader:
         sig_id = sig.get("sig_id")
         if not sig_id or sig_id in self._busy or sig_id in self.trades:
             return
+        # só as primeiras N entradas de cada minuto (meta de entradas)
+        mpm = int(self.risk.limits.get("max_per_minute") or 0)
+        if mpm > 0:
+            m = int(time.time() // 60)
+            if self._minute != m:
+                self._minute, self._min_count = m, 0
+            if self._min_count >= mpm:
+                skip(f"máx {mpm} entradas/minuto")
+                return
+            self._min_count += 1
         skip(None)   # elegível — em pipeline
         self.last_signal["why"] = "em pipeline"
         self._busy.add(sig_id)
@@ -544,6 +563,10 @@ class AutoTrader:
                          if x.get("state") in ("confirmed", "open", "buy_sent"))
             ok, why = self.risk.check(sig, open_n, day_rows)
             if not ok:
+                if "META" in (why or ""):
+                    # meta do dia atingida — pára a execução
+                    self.enabled = False
+                    await self._persist_state()
                 t["state"] = "rejected"
                 t["error"] = why
                 self.trades[sig_id] = t

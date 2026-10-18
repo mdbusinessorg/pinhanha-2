@@ -99,6 +99,31 @@ async def load_recent(limit=2000):
     return done, pend
 
 
+# ------------------------------------------------- worker↔painel (edge fn)
+
+async def state_put(k, v):
+    """Publica estado para o painel (lido pela edge function)."""
+    await _run(_req, "POST", "bot_state?on_conflict=k",
+               [{"k": k, "v": v}],
+               "resolution=merge-duplicates,return=minimal")
+
+
+async def cmds_pending(limit=10):
+    return await _run(_req, "GET",
+                      f"bot_cmds?done=is.false&order=id.asc&limit={limit}") or []
+
+
+async def cmd_done(cid, result):
+    await _run(_req, "PATCH", f"bot_cmds?id=eq.{cid}",
+               {"done": True, "result": result}, "return=minimal")
+
+
+async def feed_upsert(rows):
+    """Upsert em lote: [{asset, candles}] → deriv_feed."""
+    await _run(_req, "POST", "deriv_feed?on_conflict=asset",
+               rows, "resolution=merge-duplicates,return=minimal")
+
+
 async def list_history(limit=300, result=None, source=None):
     """Histórico para a UI: inclui importados (marcados)."""
     q = f"{TABLE}?select=*&order=emit_ts.desc&limit={limit}"

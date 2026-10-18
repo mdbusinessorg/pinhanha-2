@@ -344,6 +344,7 @@ const LIM_FIELDS = [
   ["consec_loss_limit", "Perdas seguidas máx."], ["daily_exposure", "Exposição diária máx."],
   ["min_payout", "Payout mín."], ["min_conf", "Conf. mín. p/ executar"],
   ["duration_s", "Duração (s)"], ["pause_after_errors", "Pausa após falhas"],
+  ["profit_target", "META lucro/dia (0=off)"], ["max_per_minute", "Máx. entradas/minuto"],
 ];
 const VOTERS = ["ai_turbo","multi_indicator","rsi_momentum","macd_momentum",
   "momentum","bible_sr","price_action","breakout","bible_engulfing",

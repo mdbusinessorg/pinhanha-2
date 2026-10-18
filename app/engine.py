@@ -497,7 +497,7 @@ class SignalEngine:
         if self.running and not self.paused:
             self._sig_track(rows)
         rows = rows[:12]
-        return {"signals": rows, "scanned": len(assets),
+        return {"signals": rows, "all": deduped, "scanned": len(assets),
                 "cached": len(self.cache),
                 "connected": self.feed.connected,
                 "feed_mode": self.feed.mode,
