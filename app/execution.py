@@ -16,6 +16,8 @@ import asyncio
 import json
 import logging
 import time
+import urllib.request
+import urllib.error
 
 import websockets
 
@@ -65,14 +67,80 @@ class DerivExecWS:
         self._keepalive_task = None
         self.account = None          # dict authorize da conta seleccionada
         self.accounts = []           # lista de contas da authorize
+        self._pat = False            # token PAT (API nova REST→OTP→WS)
+        self._sym_field = "symbol"   # 'underlying_symbol' no canal OTP-WS
         self.connected = False
         self.authorized = False
         self.last_error = None
         self._on_poc = None          # callback proposal_open_contract
 
+    # --------------------------------------------------------- PAT (API nova)
+
+    def _rest(self, method, path, body=None):
+        """Chamada REST à API nova — Bearer PAT + Deriv-App-ID."""
+        req = urllib.request.Request(
+            f"https://api.derivws.com{path}", method=method,
+            headers={"Authorization": f"Bearer {self.token}",
+                     "Deriv-App-ID": str(self.app_id),
+                     "Content-Type": "application/json"},
+            data=json.dumps(body).encode() if body is not None else None)
+        r = urllib.request.urlopen(req, timeout=15)
+        return json.loads(r.read())
+
+    async def _connect_pat(self):
+        """PAT: lista contas via REST; o WS abre-se por conta via OTP."""
+        try:
+            d = await asyncio.to_thread(
+                self._rest, "GET", "/trading/v1/options/accounts")
+        except Exception as e:
+            self.last_error = str(e)[:200]
+            return False
+        self._pat = True
+        self._sym_field = "underlying_symbol"
+        self.accounts = [{
+            "loginid": a.get("account_id"),
+            "currency": a.get("currency"),
+            "balance": float(a.get("balance") or 0),
+            "is_virtual": a.get("account_type") == "demo",
+            "account_type": a.get("account_type"),
+            "status": a.get("status"),
+        } for a in (d.get("data") or [])]
+        self.authorized = True
+        log.info("deriv PAT autorizado: %d contas", len(self.accounts))
+        return True
+
+    async def _pat_open_ws(self, loginid, acct):
+        """OTP one-time (120s) → URL WS dedicada à conta demo/real."""
+        d = await asyncio.to_thread(
+            self._rest, "POST",
+            f"/trading/v1/options/accounts/{loginid}/otp", {})
+        url = (d.get("data") or {}).get("url")
+        if not url:
+            raise RuntimeError("OTP sem url")
+        self.ws = await asyncio.wait_for(
+            websockets.connect(url, open_timeout=15, ping_interval=None,
+                               max_size=2 << 20), timeout=20)
+        self.host = "api.derivws.com"
+        self.connected = True
+        self._reader_task = asyncio.create_task(self._reader())
+        self._keepalive_task = asyncio.create_task(self._keepalive())
+        self.account = {"loginid": loginid,
+                        "currency": acct.get("currency"),
+                        "is_virtual": acct.get("is_virtual"),
+                        "balance": acct.get("balance")}
+        try:
+            b = await self._send({"balance": 1})
+            self.account["balance"] = b["balance"]["balance"]
+        except Exception:
+            pass
+        log.info("deriv PAT ws ligado: %s", loginid)
+        return True
+
     async def connect(self):
-        """Liga e autoriza. Roda hosts até um aceitar."""
+        """Liga e autoriza. PAT → REST; clássico → roda hosts WS."""
         self.last_error = None
+        if self.token.startswith("pat_"):
+            return await self._connect_pat()
         for i in range(len(WS_HOSTS)):
             url = WS_HOSTS[(i) % len(WS_HOSTS)].format(app=self.app_id)
             host = url.split("//", 1)[1].split("/", 1)[0]
@@ -105,7 +173,8 @@ class DerivExecWS:
 
     async def _teardown(self):
         self.connected = False
-        self.authorized = False
+        # PAT: o token REST continua válido mesmo com WS fechado
+        self.authorized = self._pat and bool(self.accounts)
         for t in (self._reader_task, self._keepalive_task):
             if t:
                 t.cancel()
@@ -181,6 +250,9 @@ class DerivExecWS:
         """Verifica que o loginid pertence às contas autorizadas."""
         for a in self.accounts:
             if a.get("loginid") == loginid:
+                if self._pat:
+                    await self._teardown()
+                    return await self._pat_open_ws(loginid, a)
                 self.account = {k: a.get(k) for k in
                                 ("loginid", "currency", "is_virtual")}
                 # refresh balance
@@ -200,7 +272,7 @@ class DerivExecWS:
             "proposal": 1, "amount": stake, "basis": "stake",
             "contract_type": contract_type, "currency": currency,
             "duration": dur, "duration_unit": dur_unit,
-            "symbol": symbol})
+            self._sym_field: symbol})
         return m["proposal"]
 
     async def buy(self, proposal_id, price):
