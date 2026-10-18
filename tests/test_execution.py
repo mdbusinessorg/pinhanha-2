@@ -54,15 +54,15 @@ def test_risk_blocks_limits():
     ok, why = r.check(sig(), open_count=3, day_rows=[])
     assert not ok and "abertas" in why
     # perda diária
-    day = [{"result": "loss", "profit": -4, "stake": 1} for _ in range(4)]
+    day = [{"result": "loss", "profit": -4, "stake": 1, "state": "settled"} for _ in range(4)]
     ok, why = r.check(sig(), 0, day)
     assert not ok and "diária" in why
     # ops/dia
-    day = [{"result": "win", "profit": 1, "stake": 1} for _ in range(30)]
+    day = [{"result": "win", "profit": 1, "stake": 1, "state": "settled"} for _ in range(30)]
     ok, why = r.check(sig(), 0, day)
     assert not ok and "dia" in why
     # exposição
-    day = [{"result": "win", "profit": 1, "stake": 20} for _ in range(3)]
+    day = [{"result": "win", "profit": 1, "stake": 20, "state": "settled"} for _ in range(3)]
     ok, why = r.check(sig(), 0, day)
     assert not ok and "exposição" in why
     # perdas seguidas
