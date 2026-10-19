@@ -124,7 +124,9 @@ async def _publish():
             log.exception("variants")
         # ---------- real_forex_engine ----------
         try:
-            fx_syms = await fx.discover_forex(engine.feed)
+            known_fx = [deriv_symbol(a) for a in SCAN_ASSETS
+                        if asset_cls(a) == "forex"]
+            fx_syms = await fx.discover_forex(engine.feed, known_fx)
             await sigstore.state_put("forex_symbols", {
                 "n": len(fx_syms), "symbols": fx_syms,
                 "validated": all(s["market"] == "forex" for s in fx_syms),

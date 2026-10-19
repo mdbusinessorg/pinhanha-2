@@ -25,35 +25,69 @@ async def _active_symbols(feed):
         return await feed._send(req)
     except Exception:
         pass
-    import websockets
+    import websockets, json as _json
     app_id = getattr(feed, "app_id", None) or 1089
-    async with websockets.connect(
-            f"wss://ws.derivws.com/websockets/v3?app_id={app_id}") as ws:
-        await ws.send(__import__("json").dumps({**req, "req_id": 1}))
-        import json as _json
-        return _json.loads(await ws.recv())
+    hosts = [getattr(feed, "host", None)] + [
+        "ws.derivws.com", "red.derivws.com", "green.derivws.com",
+        "blue.derivws.com", "ws.binaryws.com"]
+    err = None
+    for h in [x for x in hosts if x]:
+        try:
+            async with websockets.connect(
+                    f"wss://{h}/websockets/v3?app_id={app_id}") as ws:
+                await ws.send(_json.dumps({**req, "req_id": 1}))
+                return _json.loads(await ws.recv())
+        except Exception as e:
+            err = e
+    raise err or RuntimeError("active_symbols falhou em todos os hosts")
 
 
-async def discover_forex(feed):
-    """Pede `active_symbols` à API Deriv e devolve só os instrumentos cujo
-    campo `market` é forex — nunca por nome."""
-    res = await _active_symbols(feed)
+async def discover_forex(feed, known_fx=None):
+    """Descobre pares Forex:
+    1) `active_symbols` (market == "forex") — fonte oficial quando disponível;
+    2) fallback: validação dinâmica via ticks_history — cada candidato só
+       entra se a API devolver velas reais (não é confiança no nome)."""
     out = []
-    for s in res.get("active_symbols") or []:
-        if (s.get("market") or "").lower() not in ("forex",):
-            continue
-        if (s.get("symbol_type") or "") not in ("forex", "forex_basket"):
-            continue
-        out.append({
-            "symbol": s.get("symbol"),
-            "underlying": s.get("underlying_symbol") or s.get("symbol"),
-            "name": s.get("display_name") or s.get("underlying_symbol_name"),
-            "market": s.get("market"),
-            "type": s.get("symbol_type"),
-            "exchange_open": s.get("exchange_is_open"),
-            "is_trading_suspended": s.get("is_trading_suspended"),
-            "pip": s.get("pip"),
-        })
+    try:
+        res = await _active_symbols(feed)
+        for s in res.get("active_symbols") or []:
+            if (s.get("market") or "").lower() != "forex":
+                continue
+            if (s.get("symbol_type") or "") not in ("forex", "forex_basket"):
+                continue
+            out.append({
+                "symbol": s.get("symbol"),
+                "underlying": s.get("underlying_symbol") or s.get("symbol"),
+                "name": s.get("display_name") or s.get("underlying_symbol_name"),
+                "market": s.get("market"),
+                "type": s.get("symbol_type"),
+                "exchange_open": s.get("exchange_is_open"),
+                "is_trading_suspended": s.get("is_trading_suspended"),
+                "pip": s.get("pip"),
+            })
+        src = "active_symbols"
+    except Exception:
+        src = "active_symbols_falhou"
+
+    if not out and known_fx:
+        # active_symbols veio vazio — valida candidatos com velas reais
+        import asyncio as _a
+        async def probe(sym):
+            try:
+                res = await feed._send({
+                    "ticks_history": sym, "count": 2,
+                    "end": "latest", "granularity": 60, "style": "candles"})
+                return sym if res.get("candles") else None
+            except Exception:
+                return None
+        val = await _a.gather(*[probe(s) for s in known_fx])
+        out = [{"symbol": s, "underlying": s, "name": s,
+                "market": "forex", "type": "forex",
+                "exchange_open": None, "validated": "ticks_history"}
+               for s in val if s]
+        src = "ticks_history_validado"
+    for s in out:
+        s["source"] = src
     return out
 
 

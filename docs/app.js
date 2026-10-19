@@ -49,10 +49,28 @@ function go(p) {
 }
 
 async function boot() {
+  restoreCache();
   await refresh();
   setInterval(loadSignals, 5000);
   setInterval(loadStats, 8000);
   setInterval(loadStatus, 6000);
+}
+
+function restoreCache() {
+  // pinta a última resposta guardada — a página abre instantânea
+  try {
+    const c = JSON.parse(localStorage.p2cache || "{}");
+    if (c.signals) renderSignals(c.signals);
+    if (c.sigMeta) $("sigMeta").textContent = c.sigMeta;
+    if (c.kWr != null) { $("kWr").textContent = c.kWr; $("kN").textContent = c.kN ?? "—"; $("kPend").textContent = c.kPend ?? "—"; }
+  } catch (e) {}
+}
+function saveCache(p) {
+  try {
+    const c = JSON.parse(localStorage.p2cache || "{}");
+    Object.assign(c, p);
+    localStorage.p2cache = JSON.stringify(c);
+  } catch (e) {}
 }
 
 // ------------------------------------------------------- motor / estado
@@ -81,10 +99,11 @@ async function loadSignals() {
     const mc = +($("minConf")?.value || 50);
     const d = await api("https://stqhksrmcysuuigwzaoa.supabase.co/functions/v1/p2-panel/api/signals?min_conf=" + mc);
     renderSignals(d.signals || []);
-    $("sigMeta").textContent =
-      `${d.scanned || 0} mercados varridos · ${d.cached || 0} com dados` +
+    const meta = `${d.scanned || 0} mercados varridos · ${d.cached || 0} com dados` +
       (d.host ? ` · ${d.host}` : "") + (d.feed_mode ? ` · ${d.feed_mode}` : "") +
       (d.connected ? "" : " · feed desligado");
+    $("sigMeta").textContent = meta;
+    saveCache({ signals: d.signals || [], sigMeta: meta });
   } catch (e) {}
 }
 
@@ -122,6 +141,7 @@ async function loadStats() {
   try {
     const s = await api("https://stqhksrmcysuuigwzaoa.supabase.co/functions/v1/p2-panel/api/sigstats");
     const t = s.total || {};
+    saveCache({ kWr: t.wr, kN: t.n, kPend: s.pending });
     $("kWr").textContent = t.wr != null ? t.wr + "%" : "—";
     $("kWr").className = "v " + (t.wr == null ? "" : t.wr >= 53.5 ? "pos" : "neg");
     $("kWrS").textContent = t.n ? `${t.wins}W / ${t.n - t.wins}L medidos` : "sem sinais fechados ainda";
@@ -663,8 +683,7 @@ async function saveLimits() {
   } catch (e) { $("exErr").textContent = String(e); }
 }
 
-async function refresh() { await loadStatus(); await loadSignals(); await loadStats(); }
-boot().catch(() => {});
+async function refresh() { await Promise.all([loadStatus(), loadSignals(), loadStats()]); }
 if (!TOKEN) showLogin(); else { boot(); }
 
 // ---------- LABORATÓRIO ----------
