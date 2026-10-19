@@ -36,18 +36,18 @@ DEFAULT_LIMITS = {
     "stake": 1.0,              # valor fixo por operação (moeda da conta)
     "stake_min": 0.35,
     "stake_max": 100.0,
-    "max_open": 3,             # operações simultâneas abertas
-    "max_per_day": 30,
-    "daily_loss_limit": 10.0,  # moeda da conta
-    "consec_loss_limit": 5,
-    "daily_exposure": 50.0,    # soma de stakes por dia
+    "max_open": 6,             # operações simultâneas abertas
+    "max_per_day": 120,
+    "daily_loss_limit": 25.0,  # moeda da conta
+    "consec_loss_limit": 8,
+    "daily_exposure": 200.0,   # soma de stakes por dia
     "min_payout": 0.80,        # payout/stake mínimo aceitável
     "duration_s": 60,
-    "min_conf": 55,            # confiança calibrada mínima p/ executar
+    "min_conf": 52,            # confiança calibrada mínima p/ executar
     "pause_after_errors": 3,
-    "strategy_filter": None,   # nome do votante; None = consenso dos 15
+    "strategy_filter": None,   # nome do votante; None = consenso dos 21
     "profit_target": 0.0,      # meta de lucro/dia (moeda); 0 = sem meta
-    "max_per_minute": 5,       # só as primeiras N entradas de cada minuto
+    "max_per_minute": 10,      # só as primeiras N entradas de cada minuto
 }
 
 STATES = ("candidate", "validated", "proposal", "buy_sent", "confirmed",

@@ -153,6 +153,59 @@ def adx(candles, period=14):
     return {"adx": adx_val, "plus_di": pdi_s[-1], "minus_di": mdi_s[-1]}
 
 
+def cci(candles, period=20):
+    """Commodity Channel Index — desvio típico do preço vs média (Lambert).
+    Devolve o CCI do último período."""
+    if len(candles) < period + 1:
+        return None
+    tp = [(c["high"] + c["low"] + c["close"]) / 3 for c in candles]
+    win = tp[-period:]
+    m = sum(win) / period
+    md = sum(abs(x - m) for x in win) / period
+    if md == 0:
+        return 0.0
+    return (tp[-1] - m) / (0.015 * md)
+
+
+def cci_series(candles, period=20):
+    if len(candles) < period + 1:
+        return []
+    tp = [(c["high"] + c["low"] + c["close"]) / 3 for c in candles]
+    out = []
+    for i in range(period, len(tp) + 1):
+        win = tp[i - period:i]
+        m = sum(win) / period
+        md = sum(abs(x - m) for x in win) / period
+        out.append(0.0 if md == 0 else (tp[i - 1] - m) / (0.015 * md))
+    return out
+
+
+def willr(candles, period=14):
+    """Williams %R — -20 sobrecomprado, -80 sobrevendido (Larry Williams)."""
+    if len(candles) < period:
+        return None
+    win = candles[-period:]
+    hh = max(c["high"] for c in win)
+    ll = min(c["low"] for c in win)
+    if hh == ll:
+        return -50.0
+    return (hh - candles[-1]["close"]) / (hh - ll) * -100
+
+
+def realized_vol(closes, period=20):
+    """Volatilidade realizada (desvio dos retornos) — proxy do regime vol."""
+    if len(closes) < period + 1:
+        return None
+    import math
+    rets = [math.log(closes[i] / closes[i - 1])
+            for i in range(len(closes) - period, len(closes))
+            if closes[i - 1] > 0]
+    if len(rets) < period - 2:
+        return None
+    m = sum(rets) / len(rets)
+    return math.sqrt(sum((r - m) ** 2 for r in rets) / len(rets))
+
+
 def body(c):
     return c["close"] - c["open"]
 

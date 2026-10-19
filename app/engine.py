@@ -30,7 +30,10 @@ log = logging.getLogger("engine")
 VOTERS = ["ai_turbo", "multi_indicator", "rsi_momentum", "macd_momentum",
           "momentum", "bible_sr", "price_action", "breakout",
           "bible_engulfing", "bible_pinbar", "q_reversao", "q_pullback",
-          "q_breakout_retest", "q_range_fade", "q_mtf"]
+          "q_breakout_retest", "q_range_fade", "q_mtf",
+          # DEEP SEARCH 2026-10-18: conhecimento web injectado
+          "trio_osc", "v75_confluence", "vol_regime",
+          "tick_impulse", "ema_pullback", "cci_dual"]
 
 CANDLES_NEED = 100
 

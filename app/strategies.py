@@ -497,6 +497,157 @@ def s_q_mtf(c):
     return NO
 
 
+# ------------------------------------------------------------ DEEP SEARCH
+# estratégias injectadas da pesquisa web (V75/forex 1m) — 2026-10-18
+
+def s_trio_osc(c):
+    """TriO (bingood 60s): Williams %R(-20/-80) + RSI7(30/70) + CCI(±100) —
+    entrada quando os 3 cruzam o nível na mesma direcção."""
+    if len(c) < 25:
+        return NO
+    w = I.willr(c, 14)
+    r = I.rsi(closes(c), 7)
+    cc = I.cci(c, 14)
+    if w is None or r is None or cc is None:
+        return NO
+    if w > -80 and r > 30 and cc > -100:
+        return _res("call", 62, ["TriO: W%R+RSI7+CCI a sair do fundo"], "MEDIUM")
+    if w < -20 and r < 70 and cc < 100:
+        return _res("put", 62, ["TriO: W%R+RSI7+CCI a sair do topo"], "MEDIUM")
+    return NO
+
+
+def s_v75_confluence(c):
+    """Setup V75 (synthetics.info): Stoch≥80/≤20 + RSI 70/30 + histograma MACD
+    em pico/fundo + toque na banda Bollinger + rejeição da vela."""
+    if len(c) < 30:
+        return NO
+    cl = closes(c)
+    st = I.stochastic(c)
+    r = I.rsi(cl, 14)
+    mc = I.macd(cl)
+    b = I.bollinger(cl)
+    if not st or r is None or not mc or not b:
+        return NO
+    lo, mid, up = b
+    last = c[-1]
+    rej_up = last["high"] - max(last["open"], last["close"]) > \
+        (last["high"] - last["low"]) * 0.5
+    rej_dn = min(last["open"], last["close"]) - last["low"] > \
+        (last["high"] - last["low"]) * 0.5
+    if (st["k"] <= 20 and r <= 30 and mc["hist"] < 0
+            and last["low"] <= lo and rej_dn):
+        return _res("call", 68, [
+            "confluência V75: Stoch≤20 + RSI≤30 + MACD fundo + banda inf + rejeição"],
+            "LOW")
+    if (st["k"] >= 80 and r >= 70 and mc["hist"] > 0
+            and last["high"] >= up and rej_up):
+        return _res("put", 68, [
+            "confluência V75: Stoch≥80 + RSI≥70 + MACD pico + banda sup + rejeição"],
+            "LOW")
+    return NO
+
+
+def s_vol_regime(c):
+    """Regime de volatilidade dos sintéticos (Deriv Academy): o algoritmo
+    empurra a vol realizada para o alvo — vol comprimida → expansão
+    (breakout na direcção da vela), vol em pico → compressão (fade)."""
+    if len(c) < 45:
+        return NO
+    cl = closes(c)
+    v_now = I.realized_vol(cl, 10)
+    v_base = I.realized_vol(cl, 40)
+    if v_now is None or v_base is None or v_base == 0:
+        return NO
+    ratio = v_now / v_base
+    last = c[-1]
+    # vol comprimida (<55% do normal): próxima expansão segue a última vela forte
+    if ratio < 0.55 and abs(I.body(last)) > (last["high"] - last["low"]) * 0.6:
+        sig = "call" if I.is_bull(last) else "put"
+        return _res(sig, 60, [f"vol comprimida {ratio:.2f}× → expansão {sig}"],
+                    "MEDIUM")
+    # vol em pico (>2.2×): exaustão → fade do movimento extremo
+    if ratio > 2.2:
+        hh = max(x["high"] for x in c[-10:])
+        ll = min(x["low"] for x in c[-10:])
+        if last["close"] >= hh * 0.999:
+            return _res("put", 58, [f"vol em pico {ratio:.2f}× no topo → fade"],
+                        "MEDIUM")
+        if last["close"] <= ll * 1.001:
+            return _res("call", 58, [f"vol em pico {ratio:.2f}× no fundo → fade"],
+                        "MEDIUM")
+    return NO
+
+
+def s_tick_impulse(c):
+    """Impulso de ticks (MQL5): velocidade média dos últimos 5 vs 10
+    anteriores — se a fresca excede o limiar, entra na direcção."""
+    if len(c) < 20:
+        return NO
+    cl = closes(c)
+    d = [cl[i] - cl[i - 1] for i in range(1, len(cl))]
+    fresh = d[-5:]
+    base = d[-15:-5]
+    if len(base) < 10:
+        return NO
+    avg_fresh = sum(fresh) / 5
+    avg_abs_base = sum(abs(x) for x in base) / len(base)
+    if avg_abs_base == 0:
+        return NO
+    if avg_fresh > avg_abs_base * 0.8 and all(x > 0 for x in fresh[-3:]):
+        return _res("call", 57, [f"impulso ↑: vel {avg_fresh/avg_abs_base:.1f}× base"],
+                    "HIGH")
+    if avg_fresh < -avg_abs_base * 0.8 and all(x < 0 for x in fresh[-3:]):
+        return _res("put", 57, [f"impulso ↓: vel {abs(avg_fresh)/avg_abs_base:.1f}× base"],
+                    "HIGH")
+    return NO
+
+
+def s_ema_pullback(c):
+    """Pullback à EMA20 em tendência EMA20>EMA50 (setup clássico M1/M5):
+    retração toca a EMA e retoma com rejeição."""
+    if len(c) < 55:
+        return NO
+    cl = closes(c)
+    e20 = I.ema(cl, 20)
+    e50 = I.ema(cl, 50)
+    if e20 is None or e50 is None or e20 == e50:
+        return NO
+    last = c[-1]
+    rng = last["high"] - last["low"]
+    if rng <= 0:
+        return NO
+    touch = last["low"] <= e20 <= last["high"]
+    if e20 > e50 and touch and last["close"] > e20 and \
+            last["close"] - last["low"] > rng * 0.6:
+        return _res("call", 62, ["pullback à EMA20 em tendência de alta + rejeição"],
+                    "MEDIUM")
+    if e20 < e50 and touch and last["close"] < e20 and \
+            last["high"] - last["close"] > rng * 0.6:
+        return _res("put", 62, ["pullback à EMA20 em tendência de baixa + rejeição"],
+                    "MEDIUM")
+    return NO
+
+
+def s_cci_dual(c):
+    """CCI dual (FX Prime M1): CCI170 e CCI34 a cruzar zero na mesma direcção,
+    com RSI fora da zona perigosa 45-55."""
+    if len(c) < 60:
+        return NO
+    c170 = I.cci_series(c, 170)
+    c34 = I.cci_series(c, 34)
+    r = I.rsi(closes(c), 14)
+    if len(c170) < 2 or len(c34) < 2 or r is None:
+        return NO
+    if 45 <= r <= 55:
+        return NO
+    if c170[-2] <= 0 < c170[-1] and c34[-1] > 0 and r > 55:
+        return _res("call", 63, ["CCI170/34 a cruzar zero ↑ + RSI>55"], "MEDIUM")
+    if c170[-2] >= 0 > c170[-1] and c34[-1] < 0 and r < 45:
+        return _res("put", 63, ["CCI170/34 a cruzar zero ↓ + RSI<45"], "MEDIUM")
+    return NO
+
+
 STRATEGIES = {
     "trend_following": {"name": "Trend Following", "fn": s_trend_following,
                         "desc": "Segue a tendência definida por SMA20/SMA50 (Covel).", "min_candles": 55},
@@ -568,4 +719,29 @@ STRATEGIES = {
     "q_mtf": {"name": "Q: Multi-Timeframe", "fn": s_q_mtf,
               "desc": "Direção 5m + RSI em retração + vela a favor.",
               "min_candles": 30},
+    # --- DEEP SEARCH 2026-10-18 ---
+    "trio_osc": {"name": "TriO Osciladores", "fn": s_trio_osc,
+                 "desc": "W%R + RSI7 + CCI cruzam níveis na mesma direcção "
+                         "(estratégia 60s publicada ~70% declarada).",
+                 "min_candles": 25},
+    "v75_confluence": {"name": "Confluência V75", "fn": s_v75_confluence,
+                       "desc": "Stoch+RSI+MACD+Bollinger+rejeição — setup de "
+                               "scalping publicado p/ Volatility 75.",
+                       "min_candles": 30},
+    "vol_regime": {"name": "Regime de Volatilidade", "fn": s_vol_regime,
+                   "desc": "Vol realizada vs base (o algoritmo dos sintéticos "
+                           "reverte a vol para o alvo): compressão→expansão, "
+                           "pico→fade.",
+                   "min_candles": 45},
+    "tick_impulse": {"name": "Impulso de Ticks", "fn": s_tick_impulse,
+                     "desc": "Velocidade dos últimos 5 vs 10 anteriores "
+                             "(detecção de impulso estilo MQL5).",
+                     "min_candles": 20},
+    "ema_pullback": {"name": "Pullback EMA20", "fn": s_ema_pullback,
+                     "desc": "Retração à EMA20 em tendência EMA20/50 + rejeição.",
+                     "min_candles": 55},
+    "cci_dual": {"name": "CCI Dual 170/34", "fn": s_cci_dual,
+                 "desc": "CCI170 e CCI34 cruzam zero + RSI fora da zona 45-55 "
+                         "(FX Prime M1).",
+                 "min_candles": 60},
 }
