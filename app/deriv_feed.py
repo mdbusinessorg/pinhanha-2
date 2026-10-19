@@ -25,9 +25,10 @@ import time
 log = logging.getLogger("deriv")
 
 WS_HOSTS = [
+    # red.derivws.com primeiro — os outros silos dão 520 em algumas edges
+    "wss://red.derivws.com/websockets/v3?app_id={app}",
     "wss://ws.derivws.com/websockets/v3?app_id={app}",
     "wss://ws.binaryws.com/websockets/v3?app_id={app}",
-    "wss://red.derivws.com/websockets/v3?app_id={app}",
     "wss://blue.derivws.com/websockets/v3?app_id={app}",
     "wss://green.derivws.com/websockets/v3?app_id={app}",
 ]
