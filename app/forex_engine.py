@@ -71,16 +71,40 @@ async def discover_forex(feed, known_fx=None):
 
     if not out and known_fx:
         # active_symbols veio vazio — valida candidatos com velas reais
-        import asyncio as _a
-        async def probe(sym):
+        # num WS dedicado (o feed pode estar em modo 'poll' sem ws aberto)
+        import websockets, json as _json, asyncio as _a
+        app_id = getattr(feed, "app_id", None) or 1089
+        hosts = [getattr(feed, "host", None)] + [
+            "ws.derivws.com", "red.derivws.com", "green.derivws.com",
+            "blue.derivws.com", "ws.binaryws.com"]
+        ws = None
+        for h in [x for x in hosts if x]:
             try:
-                res = await feed._send({
+                ws = await websockets.connect(
+                    f"wss://{h}/websockets/v3?app_id={app_id}")
+                break
+            except Exception:
+                continue
+        async def probe(sym):
+            if ws is None:
+                return None
+            try:
+                await ws.send(_json.dumps({
                     "ticks_history": sym, "count": 2,
-                    "end": "latest", "granularity": 60, "style": "candles"})
+                    "end": "latest", "granularity": 60, "style": "candles",
+                    "req_id": 1}))
+                res = _json.loads(await ws.recv())
                 return sym if res.get("candles") else None
             except Exception:
                 return None
-        val = await _a.gather(*[probe(s) for s in known_fx])
+        try:
+            val = [await probe(s) for s in known_fx]
+        finally:
+            if ws is not None:
+                try:
+                    await ws.close()
+                except Exception:
+                    pass
         out = [{"symbol": s, "underlying": s, "name": s,
                 "market": "forex", "type": "forex",
                 "exchange_open": None, "validated": "ticks_history"}
