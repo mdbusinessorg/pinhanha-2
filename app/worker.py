@@ -16,6 +16,7 @@ import time
 
 from . import ai
 from . import patterns
+from . import relay
 from . import sigstore
 from . import tradestore
 from . import execution
@@ -42,6 +43,13 @@ _last_vrank = 0.0
 # ------------------------------------------------------------------ publish
 
 async def _publish():
+    if not engine.feed.connected or engine.feed.mode == "relay":
+        # feed WS morto (edge Deriv 520 nos IPs do runner) → relay Supabase
+        n, err = await relay.pull(engine.feed)
+        if n:
+            log.info("relay: %d símbolos via supabase", n)
+        elif err:
+            log.warning("relay falhou: %s", err)
     d = await engine.scan(50)
     await sigstore.state_put("signals", d)
     st = engine.status()
