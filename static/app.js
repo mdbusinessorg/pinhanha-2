@@ -5,12 +5,19 @@ let STRATS = {}, ASSETS = [];
 let _tradesCache = [];
 
 async function api(path, body) {
-  const r = await fetch(path, {
-    method: body ? "POST" : "GET",
-    headers: { "x-token": TOKEN, "content-type": "application/json" },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (r.status === 401) { showLogin(); throw new Error("401"); }
+  // timeout para não deixar a página presa em branco em redes lentas
+  const ctl = new AbortController();
+  const to = setTimeout(() => ctl.abort(), 15000);
+  let r;
+  try {
+    r = await fetch(path, {
+      method: body ? "POST" : "GET",
+      headers: { "x-token": TOKEN, "content-type": "application/json" },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: ctl.signal,
+    });
+  } finally { clearTimeout(to); }
+  if (r.status === 401) { localStorage.removeItem("p2tok"); TOKEN = ""; showLogin(); throw new Error("401"); }
   const d = await r.json();
   if (!r.ok) throw new Error(d.detail || "HTTP " + r.status);
   return d;
@@ -684,7 +691,9 @@ async function saveLimits() {
 }
 
 async function refresh() { await Promise.all([loadStatus(), loadSignals(), loadStats()]); }
-if (!TOKEN) showLogin(); else { boot(); }
+// mostra sempre algo de imediato — nunca deixar a página em branco
+if (!TOKEN) showLogin();
+else { $("app").style.display = "flex"; boot(); }
 
 // ---------- LABORATÓRIO ----------
 let _labT = null;
